@@ -1,6 +1,6 @@
 # Voyager Lite
 
-从 [Voyager](https://github.com/voyager-crew/voyager) 提取的 Chrome / Edge 扩展，专注对话时间线和背景特效。独立维护的非官方派生版本，沿用原版图标。
+从 [Voyager](https://github.com/voyager-crew/voyager) 提取的 Chrome / Edge 扩展，专注对话时间线和背景特效。
 
 ## 功能
 
