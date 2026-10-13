@@ -29,3 +29,9 @@ Changes include standalone extension entry points and build tooling, a reduced p
 
 ## Additional extracted or replacement modules
 
+
+Local follow-up, 2026-10-13: preserve timeline node focus during keyboard navigation, remove focus glow, and add focused-node arrow navigation in `vendor/core/services/KeyboardShortcutService.ts`.
+
+Follow-up: explicitly focus clicked nodes in `TimelineMarkerInteractions.ts`; support all four arrow keys outside editable fields without requiring node focus.
+
+Arrow layout update: defaults and one-time migration to Up/Down and double Left/Right; consume pending sequence strokes to prevent native horizontal scrolling.

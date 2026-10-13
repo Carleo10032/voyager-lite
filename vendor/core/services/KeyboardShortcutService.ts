@@ -1,3 +1,4 @@
+/* Modified for Voyager Lite on 2026-10-13: focused-node arrow navigation. */
 /**
  * KeyboardShortcutService - Manages keyboard shortcuts for timeline navigation
  *
@@ -31,29 +32,29 @@ const SEQUENCE_TIMEOUT_MS = 500;
 
 /**
  * Default keyboard shortcuts configuration
- * Using vim-style j/k (convenient, no modifiers needed)
+ * Up/down navigate one node; double left/right navigate to the endpoints.
  */
 const DEFAULT_SHORTCUTS: KeyboardShortcutConfig = {
   previous: {
     action: 'timeline:previous',
     modifiers: [],
-    key: 'k',
+    key: 'ArrowUp',
   },
   next: {
     action: 'timeline:next',
     modifiers: [],
-    key: 'j',
+    key: 'ArrowDown',
   },
   first: {
     action: 'timeline:first',
     modifiers: [],
-    key: 'g',
+    key: 'ArrowLeft',
     sequenceLength: 2,
   },
   last: {
     action: 'timeline:last',
-    modifiers: ['Shift'],
-    key: 'G',
+    modifiers: [],
+    key: 'ArrowRight',
     sequenceLength: 2,
   },
 };
@@ -123,6 +124,16 @@ export class KeyboardShortcutService {
           | KeyboardShortcutStorage
           | undefined;
 
+        const layoutKey = 'liteArrowShortcutDefaultsV1';
+        const layout = await chrome.storage.sync.get(layoutKey);
+        if (!layout[layoutKey]) {
+          // Apply the requested arrow layout once; later user customization is preserved.
+          this.config = this.normalizeConfig(DEFAULT_SHORTCUTS);
+          this.enabled = stored?.enabled ?? true;
+          await this.saveConfig(this.config, this.enabled);
+          await chrome.storage.sync.set({ [layoutKey]: true });
+          return;
+        }
         if (stored?.shortcuts) {
           const normalized = this.normalizeConfig(stored.shortcuts);
           this.config = this.validateConfig(normalized) ? normalized : DEFAULT_SHORTCUTS;
@@ -251,7 +262,7 @@ export class KeyboardShortcutService {
     if (this.keydownHandler) return;
 
     this.keydownHandler = (event: KeyboardEvent) => {
-      if (!this.enabled) return;
+      if (!this.enabled || this.listeners.size === 0) return;
 
       if (this.isImeComposing(event)) {
         this.resetSequence();
@@ -268,7 +279,7 @@ export class KeyboardShortcutService {
       const sequenceMatch = this.matchSequence(event);
       if (sequenceMatch) {
         event.preventDefault();
-        event.stopPropagation();
+        event.stopImmediatePropagation();
         this.notifyListeners(sequenceMatch.action, event);
         return;
       }
@@ -276,10 +287,21 @@ export class KeyboardShortcutService {
       const match = this.matchShortcut(event);
       if (match) {
         event.preventDefault();
-        event.stopPropagation();
+        event.stopImmediatePropagation();
         this.resetSequence();
         this.notifyListeners(match.action, event);
+        return;
       }
+
+      // Consume the first stroke and held repeats of a configured sequence too:
+      // otherwise the browser scrolls horizontally before the second stroke.
+      if ([this.config.first, this.config.last].some(shortcut =>
+        (shortcut.sequenceLength ?? 1) > 1 && this.isShortcutPressed(event, shortcut)
+      )) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+
     };
 
     window.addEventListener('keydown', this.keydownHandler, { capture: true });

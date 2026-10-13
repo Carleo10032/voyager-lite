@@ -1,3 +1,4 @@
+/* Modified for Voyager Lite on 2026-10-13: focus clicked nodes for keyboard navigation. */
 import { getTranslationSync } from '@/utils/i18n';
 
 import { TimelineTooltip } from './TimelineTooltip';
@@ -74,6 +75,8 @@ export class TimelineMarkerInteractions {
       event.stopPropagation();
       return;
     }
+    // Explicit focus avoids leaving the chat composer active after a node click.
+    dot.focus({ preventScroll: true });
     const index = dot.dataset.markerIndex;
     this.options.navigate(index ? parseInt(index, 10) : undefined, dot.dataset.targetTurnId || '');
   };

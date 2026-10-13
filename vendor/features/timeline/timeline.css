@@ -766,5 +766,10 @@ html[data-gv-scheme='dark'] .timeline-left-slider::before {
   box-shadow: none !important;
 }
 .gemini-timeline-bar .timeline-dot:focus-visible::after {
-  filter: drop-shadow(0 0 3px var(--timeline-dot-active-color));
+  filter: none !important;
+}
+
+/* Keep node focus without adding a rectangular shadow or glow. */
+.gemini-timeline-bar .timeline-dot::after {
+  filter: none !important;
 }

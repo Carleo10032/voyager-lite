@@ -10,11 +10,11 @@
 - 按平台配色并分别保存时间线设置，适配明暗主题。
 - 背景特效：飘雪、樱花、雨。
 
-默认快捷键：`K` 上一个节点、`J` 下一个节点、连续 `gg` 第一个节点、连续两次 `Shift+G` 最后一个节点。可在扩展设置中修改，输入文字时不会触发。
+默认快捷键：`↑` 上一个节点、`↓` 下一个节点、连续两次 `←` 第一个节点、连续两次 `→` 最后一个节点。可在扩展设置中修改，输入文字时不会触发。
 
 ## 安装
 
-1. 在 [Releases](https://github.com/Carleo10032/voyager-lite/releases) 下载 `Voyager-Lite-1.0.2.zip` 并解压。
+1. 在 [Releases](https://github.com/Carleo10032/voyager-lite/releases) 下载 `Voyager-Lite-1.0.3.zip` 并解压。
 2. 打开 `chrome://extensions` 或 `edge://extensions`，开启开发者模式。
 3. 点击「加载已解压的扩展程序」，选择直接包含 `manifest.json` 的文件夹。
 4. 刷新已打开的对话页面。

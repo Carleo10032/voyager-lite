@@ -273,11 +273,6 @@ export class TimelineNavigation {
         await keyboardShortcutService.init();
         if (this.destroyed) return;
         this.shortcutUnsubscribe = keyboardShortcutService.on((action, event) => {
-          // A mouse-clicked button must not retain a focus marker after shortcut navigation.
-          const focused = document.activeElement;
-          if (focused instanceof HTMLElement && focused.matches('.gemini-timeline-bar .timeline-dot')) {
-            focused.blur();
-          }
           if (action === 'timeline:previous') this.enqueueNavigation('previous', event.repeat);
           else if (action === 'timeline:next') this.enqueueNavigation('next', event.repeat);
           else if (action === 'timeline:first') void this.navigateToFirstNode();
