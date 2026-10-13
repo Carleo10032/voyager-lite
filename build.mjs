@@ -1,0 +1,16 @@
+import * as esbuild from 'esbuild';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+const root=process.cwd();
+export const options={bundle:true,target:'chrome120',platform:'browser',format:'iife',alias:{'@':path.join(root,'vendor'),'@locales':path.join(root,'vendor/locales')},define:{'import.meta.env':'{}'},plugins:[{name:'inline-css',setup(build){build.onResolve({filter:/\.css\?inline$/},args=>({path:path.resolve(args.resolveDir,args.path.split('?')[0]),namespace:'inline-css'}));build.onLoad({filter:/.*/,namespace:'inline-css'},async args=>({contents:await fs.readFile(args.path,'utf8'),loader:'text'}));}}]};
+await fs.mkdir('dist',{recursive:true});
+await fs.cp('public','dist',{recursive:true});
+const result=await esbuild.build({...options,entryPoints:['src/content.ts','src/background.ts','src/popup.tsx'],outdir:'dist',minify:true,metafile:true,legalComments:'eof'});
+await fs.writeFile('build-meta.json',JSON.stringify(result.metafile,null,2));
+await fs.copyFile('LICENSE','dist/LICENSE');
+execFileSync(process.execPath,['node_modules/@tailwindcss/cli/dist/index.mjs','-i','src/popup.css','-o','dist/popup.css','--minify'],{stdio:'inherit'});
+const hosts=['chatgpt.com','chat.openai.com','grok.com','claude.ai','gemini.google.com'];
+const matches=hosts.map(host=>`https://${host}/*`);
+await fs.writeFile('dist/manifest.json',JSON.stringify({manifest_version:3,name:'Voyager Lite',version:'1.0.2',description:'对话时间线与背景特效。',minimum_chrome_version:'120',permissions:['storage','activeTab'],icons:{32:'icon-32.png',128:'icon-128.png'},action:{default_icon:{32:'icon-32.png'},default_popup:'popup.html',default_title:'Voyager Lite'},background:{service_worker:'background.js'},content_scripts:[{matches,js:['content.js'],css:['tokens.css'],run_at:'document_idle'}]},null,2));
+console.log('Built dist/ — load this folder in Chrome / Edge.');

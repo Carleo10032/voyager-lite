@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build-meta.json
+.DS_Store
+.test-browser/
+tests/*-preview.png
+*.zip
+.env
+.env.*

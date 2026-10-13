@@ -1,0 +1,18 @@
+@import '../vendor/assets/styles/tailwind.css';
+@import '../vendor/pages/popup/index.css';
+@source './popup.tsx';
+@source '../vendor/pages/popup/components';
+@source '../vendor/components';
+/* Keep omitted upstream settings out of the layout even with utility display classes. */
+[hidden] { display: none !important; }
+
+/* Extension popup sizing needs an intrinsic pixel width, not a viewport-relative cap. */
+html, body { width: 340px; min-width: 340px; max-width: 340px; overflow-x: hidden; }
+#__root { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidden; }
+#__root > div { width: 100%; min-width: 0; box-sizing: border-box; }
+
+/* Unsupported pages have only a header and status, so let their content size the popup. */
+html:not([data-supported='true']),
+html:not([data-supported='true']) body,
+html:not([data-supported='true']) #__root { height: auto; }
+:root { --primary: #4165e8; --ring: #4165e8; --color-primary: #4165e8; --color-ring: #4165e8; }

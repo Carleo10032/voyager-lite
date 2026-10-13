@@ -1,0 +1,21 @@
+Voyager Lite 1.0.2 — unofficial derivative, modified 2026-10-13.
+Based on Voyager 1.9.0: https://github.com/voyager-crew/voyager
+Upstream revision: e854e349ef8de867e6dc587033e46425320a165f
+Copyright (c) 2022 Jonathan Braat
+Copyright (c) 2026 Jesse Zhang
+
+Distributed under GNU GPL version 3; see LICENSE.
+Corresponding source and build instructions:
+https://github.com/Carleo10032/voyager-lite/tree/v1.0.2
+Source archives are provided alongside the installation archive:
+https://github.com/Carleo10032/voyager-lite/releases/tag/v1.0.2
+
+Changes: extracted timeline and background effects, standalone Chrome/Edge
+entry points, reduced popup, four platform adapters, per-platform settings,
+platform colors, keyboard settings, navigation and focus fixes. See UPSTREAM.md
+in the source distribution. Original Voyager icons are retained.
+
+Third-party runtime/style notices are included in licenses/:
+DOMPurify (Apache-2.0 OR MPL-2.0), webextension-polyfill (MPL-2.0),
+React, React DOM, class-variance-authority, clsx, tailwind-merge, Tailwind CSS,
+and lucide-react. Each retains its respective license and copyright notices.
