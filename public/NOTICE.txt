@@ -22,3 +22,6 @@ and lucide-react. Each retains its respective license and copyright notices.
 
 1.0.3: arrow-key defaults with double Left/Right endpoint navigation,
 consume pending key sequences, preserve node focus and remove focus glow.
+
+Permission adjustment (1.0.3, 2026-10-13): remove activeTab and declare
+explicit host permissions for the four supported platforms only.
