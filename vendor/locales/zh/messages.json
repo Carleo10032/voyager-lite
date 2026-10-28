@@ -16,7 +16,7 @@
     "description": "经典时间线节点样式"
   },
   "timelineStyleCompact": {
-    "message": "紧凑索引",
+    "message": "紧凑",
     "description": "紧凑时间线索引样式"
   },
   "timelineStyleRuler": {
@@ -3182,7 +3182,7 @@
     "description": "Coachmark title introducing the ruler timeline style"
   },
   "timelineRulerCoachmarkBody": {
-    "message": "紧凑的信号簇会跟随阅读位置形成波峰。悬浮任一刻度，即刻预览用户提问与模型回复。",
+    "message": "刻度默认等长并使用浅色。悬浮时当前刻度突出并显示特征色，邻近刻度平滑渐变，在左侧预览提问与回复。",
     "description": "Coachmark body text introducing the ruler timeline style"
   },
   "timelineRulerCoachmarkToggle": {

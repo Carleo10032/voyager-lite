@@ -24,6 +24,8 @@ export const TURN_ID_ATTR = 'data-gv-turn-id';
 const MAX_ALIGNMENT_CELLS = 250_000;
 
 export interface Marker {
+  /** Host message identity survives virtualized DOM remounts. */
+  hostTurnId?: string;
   id: string;
   hash: string;
   summary: string;
@@ -43,6 +45,7 @@ export interface Marker {
 }
 
 export interface MountedTurn {
+  readonly hostTurnId?: string;
   readonly element: HTMLElement;
   readonly summary: string;
 }
@@ -94,13 +97,22 @@ function matchKnownMarkers(known: readonly Marker[], mounted: readonly MountedEn
   const hashCount = new Map<string, number>();
   const firstByHash = new Map<string, number>();
   const indexById = new Map<string, number>();
+  const indexByHostId = new Map<string, number>();
   known.forEach((marker, index) => {
     hashCount.set(marker.hash, (hashCount.get(marker.hash) ?? 0) + 1);
     if (!firstByHash.has(marker.hash)) firstByHash.set(marker.hash, index);
     indexById.set(marker.id, index);
+    if (marker.hostTurnId) indexByHostId.set(marker.hostTurnId, index);
   });
 
   const certainMatch = (entry: MountedEntry, from: number): number => {
+    if (entry.hostTurnId) {
+      const index = indexByHostId.get(entry.hostTurnId);
+      if (index !== undefined) return index >= from ? index : -1;
+      // Equal text does not make two distinct host messages the same turn.
+      // Unknown host ids must not inherit another message's content-hash id.
+      return -1;
+    }
     const stamped = entry.element.getAttribute(TURN_ID_ATTR);
     const byStamp = stamped === null ? undefined : indexById.get(stamped);
     if (byStamp !== undefined && byStamp >= from && known[byStamp].hash === entry.hash) {
@@ -139,7 +151,8 @@ function matchKnownMarkers(known: readonly Marker[], mounted: readonly MountedEn
         return toPrev <= toNext ? driftAt(prev) : driftAt(i);
       });
       alignRun(known, run, lo, hi, drifts).forEach((index, r) => {
-        matched[prev + 1 + r] = index;
+        matched[prev + 1 + r] = run[r].hostTurnId && index >= 0 &&
+          known[index].hostTurnId !== run[r].hostTurnId ? -1 : index;
       });
     }
     prev = i;
@@ -165,7 +178,8 @@ function alignRun(
   const n = Math.max(0, hi - lo);
   const result = new Array<number>(m).fill(-1);
   const isCandidate = (index: number, entry: MountedEntry): boolean =>
-    known[index].hash === entry.hash;
+    known[index].hash === entry.hash &&
+    (!entry.hostTurnId || !known[index].hostTurnId || entry.hostTurnId === known[index].hostTurnId);
   const hashes = new Set(run.map((entry) => entry.hash));
   let anyCandidate = false;
   for (let j = lo; j < hi && !anyCandidate; j++) anyCandidate = hashes.has(known[j].hash);
@@ -430,6 +444,7 @@ export function mergeMountedTurns(
     entry.element.setAttribute(TURN_ID_ATTR, id);
     return {
       id,
+      hostTurnId: entry.hostTurnId,
       hash: entry.hash,
       summary: entry.summary,
       starred: false,
@@ -463,6 +478,8 @@ export function mergeMountedTurns(
       anchorDrift.set(knownIndex, mounted[i].center - survivor.center);
       survivor.element = mounted[i].element;
       survivor.summary = mounted[i].summary;
+      survivor.hash = mounted[i].hash;
+      survivor.hostTurnId = mounted[i].hostTurnId ?? survivor.hostTurnId;
       mounted[i].element.setAttribute(TURN_ID_ATTR, survivor.id);
       lastAnchor = knownIndex;
       continue;

@@ -188,113 +188,46 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
   display: none;
 }
 
-/* Ruler timeline style: keep the classic full-height marker positions and
- * interactions, but render each node as a quiet horizontal tick. */
+/* Ruler: compact tick geometry, with wider spacing and a pointer-driven crest. */
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-track {
-  overflow: hidden;
+  overflow: visible;
 }
-
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-track-content {
   height: 100% !important;
 }
-
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot {
   top: calc(50% + var(--timeline-compact-offset, 0px));
-  height: 8px;
-  --gv-timeline-ruler-scale: 0.29;
-  --gv-timeline-ruler-opacity: 0.42;
+  width: 96px;
+  height: var(--lite-ruler-gap, 14px);
+  --gv-timeline-ruler-scale: 1;
 }
-
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot::after {
   right: 50%;
   left: auto;
-  width: 24px;
-  height: 2px;
-  border-radius: 9999px;
+  width: calc(12px * var(--gv-timeline-ruler-scale));
+  height: var(--lite-tick-height, 3px);
+  border-radius: 1px;
   clip-path: none;
   background-color: var(--timeline-dot-color);
   box-shadow: none;
   filter: none;
-  opacity: var(--gv-timeline-ruler-opacity);
-  transform: translateY(-50%) scaleX(var(--gv-timeline-ruler-scale));
+  opacity: 0.72;
+  transform: translateY(-50%);
   transform-origin: right center;
-  transition:
-    transform 110ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    background-color 150ms ease,
-    box-shadow 150ms ease,
-    opacity 110ms ease-out;
+  transition: width 82ms cubic-bezier(.2,.8,.2,1), background-color 100ms ease;
 }
-
-.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot:hover::after {
-  opacity: 0.9;
-  transform: translateY(-50%) scaleX(1);
-}
-
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.active::after,
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot:hover::after,
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot:focus-visible::after {
-  box-shadow: 0 0 0 2px var(--timeline-dot-active-color);
-}
-
-.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.active::after {
   background-color: var(--timeline-dot-active-color);
-  box-shadow: none;
   opacity: 1;
 }
-
-.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.starred::after {
-  background-color: var(--timeline-star-color);
-  opacity: 0.9;
-}
-
-.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.collapsed::before,
-.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.holding::before {
-  display: block;
-  right: 50%;
-  left: auto;
-  width: 25px;
-  height: 7px;
-  border: 1px dashed var(--timeline-dot-active-color);
-  border-radius: 9999px;
-  background: transparent;
-  box-shadow: none;
-  clip-path: none;
-  opacity: 0.55;
-  transform: translateY(-50%);
-}
-
-.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.holding::before {
-  border-style: solid;
-  animation: timeline-hold-fade var(--timeline-hold-ms) linear forwards;
-}
-
-.gemini-timeline-bar.gv-timeline-style-ruler.gv-timeline-ruler-inward-right .timeline-dot::after {
-  right: auto;
-  left: 50%;
-  transform: translateY(-50%) scaleX(var(--gv-timeline-ruler-scale));
-  transform-origin: left center;
-}
-
-.gemini-timeline-bar.gv-timeline-style-ruler.gv-timeline-ruler-inward-right
-  .timeline-dot:hover::after {
-  transform: translateY(-50%) scaleX(1);
-}
-
-.gemini-timeline-bar.gv-timeline-style-ruler.gv-timeline-ruler-inward-right
-  .timeline-dot.collapsed::before,
-.gemini-timeline-bar.gv-timeline-style-ruler.gv-timeline-ruler-inward-right
-  .timeline-dot.holding::before {
-  right: auto;
-  left: 50%;
-  transform: translateY(-50%);
-}
-
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot::before,
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-runner-ring {
   display: none;
 }
-
 @media (prefers-reduced-motion: reduce) {
-  .gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot::after {
-    transition: none;
-  }
+  .gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot::after { transition: none; }
 }
 
 /* Compact timeline style: the full-height bar stays one hover target and
@@ -328,7 +261,7 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
   right: 50%;
   left: auto;
   width: 12px;
-  height: 3px;
+  height: var(--lite-tick-height, 3px);
   border-radius: 1px;
   clip-path: none;
   background-color: var(--timeline-dot-color);

@@ -3,12 +3,11 @@ import React from 'react';
 
 import type { TranslationKey } from '@/utils/translations';
 
-import { Label } from '../../../components/ui/label';
 import { Switch } from '../../../components/ui/switch';
 import { ExperimentalBadge } from './ExperimentalBadge';
 
 export interface SettingToggleRowProps {
-  /** Input id; the label points at it. */
+  /** Input id; passive text supplies its accessible name. */
   id: string;
   /** Settings-search id handed to `isVisible`. */
   settingId: string;
@@ -47,17 +46,17 @@ export function SettingToggleRow({
   const visible = isVisible(settingId);
   if (!visible && unmountWhenHidden) return null;
   const labelNode = (
-    <Label
-      htmlFor={id}
+    <span
+      id={`${id}-label`}
       className={`text-sm font-medium transition-colors${
         disabled
-          ? ' text-muted-foreground cursor-not-allowed'
-          : ' group-hover:text-primary cursor-pointer'
+          ? ' text-muted-foreground'
+          : ''
       }${experimental ? ' flex items-center gap-1' : ''}`}
     >
       {t(label)}
       {experimental && <ExperimentalBadge title={t('experimentalLabel')} />}
-    </Label>
+    </span>
   );
   return (
     <div
@@ -74,6 +73,7 @@ export function SettingToggleRow({
       )}
       <Switch
         id={id}
+        aria-labelledby={`${id}-label`}
         checked={checked}
         disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}

@@ -148,7 +148,8 @@ export class TimelineTooltip {
     const minW = 160;
     const leftAvail = Math.max(0, dotRect.left - gap - viewportPad);
     const rightAvail = Math.max(0, vw - dotRect.right - gap - viewportPad);
-    let placement: 'left' | 'right' = rightAvail > leftAvail ? 'right' : 'left';
+    let placement: 'left' | 'right' = this.options.getContext().style === 'ruler' && leftAvail >= 160
+      ? 'left' : rightAvail > leftAvail ? 'right' : 'left';
     let avail = placement === 'right' ? rightAvail : leftAvail;
     const tiers =
       this.options.getContext().style === 'ruler'

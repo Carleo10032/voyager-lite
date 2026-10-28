@@ -10,6 +10,7 @@ import { CatalogTurnOwnership } from './CatalogTurnOwnership';
 import type { CatalogTimelineConfig } from './config';
 import type { CatalogSendTimestamps } from './sendTimestamps';
 import { turnSummary } from './turnHash';
+import { hostTurnId } from './hostTurnId';
 import { type Marker, type MountedTurn, mergeMountedTurns, rememberedMarkers } from './turnMerge';
 import { mountedOwnershipTurns } from './turnOwnership';
 import { renderedCheck, togglesVisibility } from './turnVisibility';
@@ -115,6 +116,7 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
       .map((element) => ({
         element,
         summary: turnSummary(element),
+        hostTurnId: hostTurnId(this.config.siteId, element),
       }));
     for (const turn of mounted)
       if (!this.originalStamps.has(turn.element))

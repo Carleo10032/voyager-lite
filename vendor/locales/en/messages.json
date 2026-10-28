@@ -3182,7 +3182,7 @@
     "description": "Coachmark title introducing the ruler timeline style"
   },
   "timelineRulerCoachmarkBody": {
-    "message": "A compact signal follows your reading position. Hover any tick to instantly preview the question and response.",
+    "message": "Ticks rest at equal lengths in the soft color. Hover to extend and accent a tick, taper its neighbours, and preview the conversation on the left.",
     "description": "Coachmark body text introducing the ruler timeline style"
   },
   "timelineRulerCoachmarkToggle": {

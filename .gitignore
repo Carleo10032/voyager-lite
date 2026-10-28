@@ -7,3 +7,4 @@ tests/*-preview.png
 *.zip
 .env
 .env.*
+releases/

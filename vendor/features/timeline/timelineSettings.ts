@@ -14,7 +14,7 @@ export type TimelineSettingField =
   | 'Position'
   | 'PreviewPinned';
 
-export type TimelineScrollMode = 'flow' | 'jump';
+export type TimelineScrollMode = 'jump';
 
 /** The behaviour knobs one rail runs with, whichever site and storage they came from. */
 export interface TimelineSettings {
@@ -34,9 +34,6 @@ export function timelineSettingsPrefix(siteId: string): string {
 export function timelineSettingKey(siteId: string, field: TimelineSettingField): string {
   return `${timelineSettingsPrefix(siteId)}${field}`;
 }
-
-const isScrollMode = (value: unknown): value is TimelineScrollMode =>
-  value === 'flow' || value === 'jump';
 
 /** The style a timeline plugin's settings choose; `compactView` is the pre-style boolean. */
 function pluginStyle(settings: Readonly<Record<string, unknown>>): TimelineStyle {
@@ -63,11 +60,10 @@ export function readTimelineSettings({
   stored,
 }: ReadTimelineSettingsInput): TimelineSettings {
   const read = (field: TimelineSettingField) => stored[timelineSettingKey(siteId, field)];
-  const storedMode = read('ScrollMode');
   const storedStyle = read('Style');
   const fromStorage: TimelineSettings = {
     style: isTimelineStyle(storedStyle) ? storedStyle : 'dots',
-    scrollMode: isScrollMode(storedMode) ? storedMode : 'flow',
+    scrollMode: 'jump',
     hideContainer: !!read('HideContainer'),
     draggable: !!read('Draggable'),
     markerLevel: !!read('MarkerLevel'),

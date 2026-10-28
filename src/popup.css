@@ -8,7 +8,7 @@
 
 /* Extension popup sizing needs an intrinsic pixel width, not a viewport-relative cap. */
 html, body { width: 340px; min-width: 340px; max-width: 340px; overflow-x: hidden; }
-#__root { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidden; }
+#__root { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidden; scrollbar-gutter: stable; }
 #__root > div { width: 100%; min-width: 0; box-sizing: border-box; }
 
 /* Unsupported pages have only a header and status, so let their content size the popup. */

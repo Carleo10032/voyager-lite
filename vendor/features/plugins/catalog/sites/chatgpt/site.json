@@ -2,7 +2,7 @@
   "$schema": "https://voyager.nagi.fun/site.schema.json",
   "id": "chatgpt",
   "label": "ChatGPT",
-  "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+  "matches": ["https://chatgpt.com/*"],
   "selectors": {
     "userTurn": "[data-user-message-bubble], [data-message-author-role=\"user\"]:not(:has([data-user-message-bubble]))",
     "assistantTurn": "[data-chatgpt-selection-message-id]",

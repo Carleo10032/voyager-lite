@@ -1,4 +1,4 @@
-Voyager Lite 1.0.3 — unofficial derivative, modified 2026-10-13.
+Voyager Lite 1.1.0 — unofficial derivative, modified 2026-10-28.
 Based on Voyager 1.9.0: https://github.com/voyager-crew/voyager
 Upstream revision: e854e349ef8de867e6dc587033e46425320a165f
 Copyright (c) 2022 Jonathan Braat
@@ -6,13 +6,13 @@ Copyright (c) 2026 Jesse Zhang
 
 Distributed under GNU GPL version 3; see LICENSE.
 Corresponding source and build instructions:
-https://github.com/Carleo10032/voyager-lite/tree/v1.0.3
+See accompanying Voyager-Lite-1.1.0-source.zip.
 Source archives are provided alongside the installation archive:
-https://github.com/Carleo10032/voyager-lite/releases/tag/v1.0.3
+https://github.com/Carleo10032/voyager-lite
 
 Changes: extracted timeline and background effects, standalone Chrome/Edge
 entry points, reduced popup, four platform adapters, per-platform settings,
-platform colors, keyboard settings, navigation and focus fixes. See UPSTREAM.md
+platform colors, navigation and focus fixes. See UPSTREAM.md
 in the source distribution. Original Voyager icons are retained.
 
 Third-party runtime/style notices are included in licenses/:
@@ -25,3 +25,5 @@ consume pending key sequences, preserve node focus and remove focus glow.
 
 Permission adjustment (1.0.3, 2026-10-13): remove activeTab and declare
 explicit host permissions for the four supported platforms only.
+
+1.0.4: restore Dots, Ruler and Compact style selection; preserve 1.0.3 navigation.

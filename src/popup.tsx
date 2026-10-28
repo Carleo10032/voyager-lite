@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TimelineSettingsCard, type TimelineSettingsValues } from '../vendor/pages/popup/components/TimelineSettingsCard';
 import { VisualEffectPicker, type VisualEffect } from '../vendor/pages/popup/components/VisualEffectPicker';
-import { KeyboardShortcutSettings } from '../vendor/pages/popup/components/KeyboardShortcutSettings';
 import { DarkModeToggle } from '../vendor/components/DarkModeToggle';
 import { Card } from '../vendor/components/ui/card';
 import { Label } from '../vendor/components/ui/label';
@@ -14,7 +13,7 @@ import { applyPopupBrand } from './theme';
 import { readSettings, settingsPatch, enabledKey } from './settings';
 
 const t=(key:TranslationKey)=>zh[key]?.message ?? key;
-const visible=new Set(['timelineStyle','scrollMode','hideOuterContainer','pinTimelinePreview']);
+const visible=new Set(['timelineStyle','hideOuterContainer','pinTimelinePreview']);
 
 function Popup(){
   const [siteId,setSiteId]=useState<string | null>(null);
@@ -85,7 +84,6 @@ function Popup(){
         {values.enabled && <TimelineSettingsCard values={values} onChange={change}
           onResetPosition={()=>{}}
           onViewStarredHistory={()=>{}} isVisible={id=>visible.has(id)} t={t}/>}</>}
-        {siteId && values.enabled && <KeyboardShortcutSettings t={t}/>}
         {siteId && <VisualEffectPicker value={effect} onChange={value=>void write({gvVisualEffect:value,gvSnowEffect:false})} t={t}/>}
       </>}
       {error && <p role="alert" className="text-destructive text-xs">{error}</p>}

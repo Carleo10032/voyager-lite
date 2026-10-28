@@ -236,13 +236,11 @@ export class TimelineEngine {
     this.recalculateAndRenderMarkers();
     // Handle URL hash for starred message navigation
     this.navigation.handleStarredMessageNavigation();
-    // Initialize keyboard shortcuts
-    await this.navigation.initKeyboardShortcuts();
     if (this.destroyed) return;
     try {
       const g = globalThis as ExtGlobal;
       const defaults = {
-        [this.settingKey('ScrollMode')]: 'flow',
+        [this.settingKey('ScrollMode')]: 'jump',
         [this.settingKey('Style')]: 'dots',
         [this.settingKey('HideContainer')]: false,
         [this.settingKey('BarWidth')]: null,
@@ -284,7 +282,7 @@ export class TimelineEngine {
       } else {
         // No extension storage available, try to load critical fallback from localStorage
         const saved = localStorage.getItem(this.settingKey('ScrollMode'));
-        if (saved === 'flow' || saved === 'jump') res = { [this.settingKey('ScrollMode')]: saved };
+        if (saved === 'jump') res = { [this.settingKey('ScrollMode')]: saved };
       }
       if (this.destroyed) return;
 

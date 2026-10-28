@@ -3,7 +3,7 @@ import type { TimelineStyle } from '@/core/types/common';
 
 import type { TimelineHierarchyGeometry } from './TimelineHierarchyGeometry';
 import { getTimelineSpringProfile } from './TimelineNavigation';
-import { denseMarkerOffsets, rulerWaveTick } from './denseMarkerLayout';
+import { denseMarkerOffsets } from './denseMarkerLayout';
 import type { DotElement, TimelineMarker } from './types';
 
 /** Owns measured marker positions, keyed dot rendering and the runner lifetime. */
@@ -30,6 +30,7 @@ export class TimelineDotLayer {
   private bar: HTMLElement | null = null;
   private track: HTMLElement | null = null;
   private content: HTMLElement | null = null;
+  private rulerPointerY: number | null = null;
   constructor(
     private readonly getMarkers: () => TimelineMarker[],
     private readonly geometry: TimelineHierarchyGeometry,
@@ -75,6 +76,8 @@ export class TimelineDotLayer {
     this.bar = bar;
     this.track = track;
     this.content = content;
+    bar.addEventListener('pointermove', this.onRulerPointerMove);
+    bar.addEventListener('pointerleave', this.onRulerPointerLeave);
   }
   get padding(): number {
     return this.getTrackPadding();
@@ -88,6 +91,9 @@ export class TimelineDotLayer {
   destroy(): void {
     this.destroyed = true;
     if (this.runnerRaf !== null) cancelAnimationFrame(this.runnerRaf);
+    this.bar?.removeEventListener('pointermove', this.onRulerPointerMove);
+    this.bar?.removeEventListener('pointerleave', this.onRulerPointerLeave);
+    this.rulerPointerY = null;
     this.dots.clear();
     this.bar = null;
     this.track = null;
@@ -333,56 +339,34 @@ export class TimelineDotLayer {
     return lo - 1;
   }
 
-  private getRulerFocusIndex(): number {
-    const fallback = Math.max(0, this.getActiveIndex());
-    if (
-      !this.scrollContainer ||
-      this.markerTops.length !== this.markers.length ||
-      this.markerTops.length === 0
-    ) {
-      return fallback;
-    }
+  private readonly onRulerPointerMove = (event: PointerEvent): void => {
+    if (event.pointerType === 'touch' || this.options.getStyle() !== 'ruler') return;
+    this.rulerPointerY = event.clientY;
+    this.updateRulerWave();
+  };
 
-    const focusTop =
-      this.scrollContainer.scrollTop + Math.max(0, this.scrollContainer.clientHeight) * 0.45;
-    const upperIndex = this.lowerBound(this.markerTops, focusTop);
-    if (upperIndex <= 0) return 0;
-    if (upperIndex >= this.markerTops.length) return this.markerTops.length - 1;
+  private readonly onRulerPointerLeave = (): void => {
+    this.rulerPointerY = null;
+    this.updateRulerWave();
+  };
 
-    const lowerIndex = upperIndex - 1;
-    const lowerTop = this.markerTops[lowerIndex];
-    const upperTop = this.markerTops[upperIndex];
-    const progress = Math.max(
-      0,
-      Math.min(1, (focusTop - lowerTop) / Math.max(1, upperTop - lowerTop)),
-    );
-    return lowerIndex + progress;
-  }
-
-  /** Smooth Gaussian crest that travels through the ruler as the page scrolls. */
+  /** Continuous pointer-distance falloff; resting geometry never follows scrolling. */
   private updateRulerWave(): void {
-    if (this.options.getStyle() !== 'ruler') {
-      this.markers.forEach((marker) => {
-        this.dots.get(marker.id)?.style.removeProperty('--gv-timeline-ruler-scale');
-        this.dots.get(marker.id)?.style.removeProperty('--gv-timeline-ruler-opacity');
-      });
-      return;
-    }
-
-    const focusIndex = this.getRulerFocusIndex();
-    const start = Math.max(0, this.visibleRange.start);
-    const end =
-      this.visibleRange.end >= start
-        ? Math.min(this.visibleRange.end, this.markers.length - 1)
-        : this.markers.length - 1;
-    for (let index = start; index <= end; index++) {
-      const marker = this.markers[index];
-      if (!marker) continue;
-      const dot = this.dots.get(marker.id);
-      if (!dot) continue;
-      const { scale, opacity } = rulerWaveTick(Math.abs(index - focusIndex));
-      dot.style.setProperty('--gv-timeline-ruler-scale', scale.toFixed(3));
-      dot.style.setProperty('--gv-timeline-ruler-opacity', opacity.toFixed(3));
+    const ruler = this.options.getStyle() === 'ruler';
+    if (!ruler) this.rulerPointerY = null;
+    const dots = [...this.dots.values()].filter(dot => dot.isConnected);
+    const gap = parseFloat(this.bar?.style.getPropertyValue('--lite-ruler-gap') || '14');
+    const sigma = Math.max(1, gap) * 1.35;
+    for (const dot of dots) {
+      if (!ruler) {
+        dot.style.removeProperty('--gv-timeline-ruler-scale');
+        continue;
+      }
+      const rect = dot.getBoundingClientRect();
+      const distance = this.rulerPointerY === null ? Infinity
+        : this.rulerPointerY - (rect.top + rect.height / 2);
+      const crest = Math.exp(-(distance * distance) / (2 * sigma * sigma));
+      dot.style.setProperty('--gv-timeline-ruler-scale', (1 + (5 / 3) * crest).toFixed(4));
     }
   }
 
@@ -392,8 +376,26 @@ export class TimelineDotLayer {
       if (!hiddenIndices.has(index)) visibleIndices.push(index);
     }
 
-    const rankOffsets = denseMarkerOffsets(visibleIndices.length);
-    return new Map(visibleIndices.map((markerIndex, rank) => [markerIndex, rankOffsets[rank]]));
+    const ruler = this.options.getStyle() === 'ruler';
+    const count = visibleIndices.length;
+    const span = Math.min(280, Math.max(14, (this.track?.clientHeight ?? 340) - 40));
+    const gap = count > 1 ? Math.min(14, span / (count - 1)) : 14;
+    this.bar?.style.setProperty('--lite-ruler-gap', `${gap}px`);
+    const rankOffsets = ruler
+      ? visibleIndices.map((_, rank) => (rank - (count - 1) / 2) * gap)
+      : denseMarkerOffsets(count);
+    // Dense spacing can land each 3px tick on a different subpixel phase.
+    // Snap its painted top and thickness to device pixels, keeping the hit area intact.
+    const dpr = window.devicePixelRatio || 1;
+    const tickHeight = Math.round(3 * dpr) / dpr;
+    this.bar?.style.setProperty('--lite-tick-height', `${tickHeight}px`);
+    const bounds = this.content?.getBoundingClientRect();
+    const middle = bounds ? bounds.top + bounds.height / 2 : 0;
+    return new Map(visibleIndices.map((markerIndex, rank) => {
+      const offset = rankOffsets[rank];
+      const aligned = Math.round((middle + offset - tickHeight / 2) * dpr) / dpr - middle + tickHeight / 2;
+      return [markerIndex, aligned];
+    }));
   }
 
   private applyDotPosition(dot: DotElement, index: number, compactOffset?: number): void {

@@ -9,12 +9,9 @@ import { Card, CardContent, CardTitle } from '../../../components/ui/card';
 import { Label } from '../../../components/ui/label';
 import { SettingToggleRow } from './SettingToggleRow';
 
-export type ScrollMode = 'jump' | 'flow';
-
 /** Every timeline setting the card edits; the popup owns the state and persistence. */
 export interface TimelineSettingsValues {
   timelineStyle: TimelineStyle;
-  mode: ScrollMode;
   hideContainer: boolean;
   draggableTimeline: boolean;
   timelinePreviewPinned: boolean;
@@ -40,12 +37,8 @@ const TIMELINE_STYLE_OPTIONS: readonly {
   left: string;
 }[] = [
   { value: 'dots', label: 'timelineStyleDots', left: '4px' },
-  { value: 'compact', label: 'timelineStyleRuler', left: 'calc(50% + 2px)' },
-];
-
-const SCROLL_MODE_OPTIONS: readonly { value: ScrollMode; label: TranslationKey; left: string }[] = [
-  { value: 'flow', label: 'flow', left: '4px' },
-  { value: 'jump', label: 'jump', left: 'calc(50% + 2px)' },
+  { value: 'ruler', label: 'timelineStyleRuler', left: 'calc(33.333333% + 2.666667px)' },
+  { value: 'compact', label: 'timelineStyleCompact', left: 'calc(66.666667% + 1.333333px)' },
 ];
 
 export function TimelineSettingsCard({
@@ -57,7 +50,6 @@ export function TimelineSettingsCard({
   t,
 }: TimelineSettingsCardProps) {
   const activeStyle = TIMELINE_STYLE_OPTIONS.find((o) => o.value === values.timelineStyle);
-  const activeMode = SCROLL_MODE_OPTIONS.find((o) => o.value === values.mode);
   // Ruler and compact paint no rail, so only dots has a container to hide. The
   // stored value is kept and applies again when the user returns to dots.
   const containerless = values.timelineStyle !== 'dots';
@@ -68,9 +60,9 @@ export function TimelineSettingsCard({
       <CardContent className="space-y-4 p-0">
         <div hidden={!isVisible('timelineStyle')}>
           <Label className="mb-2 block text-sm font-medium">{t('timelineStyle')}</Label>
-          <div className="bg-secondary/60 relative grid grid-cols-2 gap-1 rounded-xl p-1">
+          <div className="bg-secondary/60 relative grid grid-cols-3 gap-1 rounded-xl p-1">
             <div
-              className="bg-primary pointer-events-none absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg shadow-sm transition-all duration-300 ease-out"
+              className="bg-primary pointer-events-none absolute top-1 bottom-1 w-[calc((100%-16px)/3)] rounded-lg shadow-sm transition-all duration-300 ease-out"
               style={{ left: activeStyle?.left ?? '4px' }}
             />
             {TIMELINE_STYLE_OPTIONS.map((option) => (
@@ -85,29 +77,6 @@ export function TimelineSettingsCard({
                 }`}
                 aria-pressed={values.timelineStyle === option.value}
                 onClick={() => onChange({ timelineStyle: option.value })}
-              >
-                {t(option.label)}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div hidden={!isVisible('scrollMode')}>
-          <Label className="mb-2 block text-sm font-medium">{t('scrollMode')}</Label>
-          <div className="bg-secondary/60 relative grid grid-cols-2 gap-1 rounded-xl p-1">
-            <div
-              className="bg-primary pointer-events-none absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg shadow-sm transition-all duration-300 ease-out"
-              style={{ left: activeMode?.left ?? '4px' }}
-            />
-            {SCROLL_MODE_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                className={`relative z-10 rounded-lg px-3 py-2 text-sm font-bold transition-all duration-200 ${
-                  values.mode === option.value
-                    ? 'text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                aria-pressed={values.mode === option.value}
-                onClick={() => onChange({ mode: option.value })}
               >
                 {t(option.label)}
               </button>
