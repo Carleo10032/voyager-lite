@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.1 — 2026-10-28
+
+- Prevent accidental text selection when repeatedly clicking popup controls; keep error messages selectable.
+
+## 2.1.0 — 2026-10-28
+
+- Size the popup to its visible settings and remove reserved scrollbar space on the right.
+
 ## 2.0.1 — 2026-10-28
 
 - Use the existing active-state button colors for resting, hovered and opened full-preview states.
