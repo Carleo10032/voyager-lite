@@ -95,3 +95,7 @@ The Chinese compact-style label in vendor/locales/zh/messages.json is shortened 
 2.0.0 (2026-10-28): full-preview button uses the existing light platform background and platform accent icon in its resting state; publish the accumulated timeline and preview refinements.
 
 2.0.1 (2026-10-28): unify full-preview button states using the existing active-state background and platform accent icon.
+
+2.1.0 (2026-10-28): adapt popup height to visible settings and remove the reserved scrollbar gutter.
+
+2.1.1 (2026-10-28): prevent native text selection in popup controls while preserving selectable error messages.

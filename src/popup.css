@@ -8,11 +8,14 @@
 
 /* Extension popup sizing needs an intrinsic pixel width, not a viewport-relative cap. */
 html, body { width: 340px; min-width: 340px; max-width: 340px; overflow-x: hidden; }
-#__root { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidden; scrollbar-gutter: stable; }
+#__root { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidden; }
 #__root > div { width: 100%; min-width: 0; box-sizing: border-box; }
 
-/* Unsupported pages have only a header and status, so let their content size the popup. */
-html:not([data-supported='true']),
-html:not([data-supported='true']) body,
-html:not([data-supported='true']) #__root { height: auto; }
+/* Repeated clicks on controls must not start native text selection. */
+#__root { user-select: none; }
+#__root input:not([type='checkbox']), #__root textarea, #__root [role='alert'] { user-select: text; }
+
+/* Let every state size to its content, scrolling only at the browser popup limit. */
+html, body, #__root { height: auto; }
+#__root { max-height: 600px; }
 :root { --primary: #4165e8; --ring: #4165e8; --color-primary: #4165e8; --color-ring: #4165e8; }
