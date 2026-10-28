@@ -8,7 +8,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--lite-brand-soft);
+  background: var(--timeline-tooltip-bg);
   border: 1px solid var(--timeline-tooltip-border);
   cursor: pointer;
   padding: 0;
@@ -32,16 +32,6 @@
 .timeline-preview-toggle[hidden],
 .gemini-timeline-bar.gv-timeline-empty ~ .timeline-preview-toggle {
   display: none;
-}
-
-.timeline-preview-toggle:hover {
-  color: var(--timeline-dot-active-color);
-  background-color: var(--timeline-tooltip-bg);
-}
-
-.timeline-preview-toggle.active {
-  color: var(--timeline-dot-active-color);
-  background-color: var(--timeline-tooltip-bg);
 }
 
 .timeline-preview-panel {

@@ -12,7 +12,7 @@
 
 ## 安装
 
-1. 在 [Releases](https://github.com/Carleo10032/voyager-lite/releases) 下载 `Voyager-Lite-2.0.0.zip` 并解压，也可按下方说明从源码构建。
+1. 在 [Releases](https://github.com/Carleo10032/voyager-lite/releases) 下载 `Voyager-Lite-2.0.1.zip` 并解压，也可按下方说明从源码构建。
 2. 打开 `chrome://extensions` 或 `edge://extensions`，开启开发者模式。
 3. 点击「加载已解压的扩展程序」，选择直接包含 `manifest.json` 的文件夹。
 4. 刷新已打开的对话页面。

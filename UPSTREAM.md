@@ -93,3 +93,5 @@ The Chinese compact-style label in vendor/locales/zh/messages.json is shortened 
 1.2.0 node list placement: anchor the node full-preview panel 10px from the list button edge; retain other preview spacing.
 
 2.0.0 (2026-10-28): full-preview button uses the existing light platform background and platform accent icon in its resting state; publish the accumulated timeline and preview refinements.
+
+2.0.1 (2026-10-28): unify full-preview button states using the existing active-state background and platform accent icon.

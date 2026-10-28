@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1 — 2026-10-28
+
+- Use the existing active-state button colors for resting, hovered and opened full-preview states.
+
 ## 2.0.0 — 2026-10-28
 
 - Use a light platform-colored background and platform accent icon for the full-preview button at rest.
