@@ -199,12 +199,12 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
   top: calc(50% + var(--timeline-compact-offset, 0px));
   width: 96px;
   height: var(--lite-ruler-gap, 14px);
-  --gv-timeline-ruler-scale: 1;
+  --gv-timeline-ruler-width: 7.5px;
 }
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot::after {
   right: 50%;
   left: auto;
-  width: calc(12px * var(--gv-timeline-ruler-scale));
+  width: var(--gv-timeline-ruler-width);
   height: var(--lite-tick-height, 3px);
   border-radius: 1px;
   clip-path: none;
@@ -260,7 +260,7 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
 .gemini-timeline-bar.timeline-style-compact .timeline-dot::after {
   right: 50%;
   left: auto;
-  width: 12px;
+  width: 7.5px;
   height: var(--lite-tick-height, 3px);
   border-radius: 1px;
   clip-path: none;
@@ -279,7 +279,6 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
 }
 
 .gemini-timeline-bar.timeline-style-compact .timeline-dot.active::after {
-  width: 16px;
   background-color: var(--timeline-dot-active-color);
   opacity: 1;
 }
@@ -452,6 +451,7 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
 }
 
 .timeline-tooltip {
+  box-sizing: border-box;
   position: fixed;
   max-width: var(--timeline-tooltip-max);
   background-color: var(--timeline-tooltip-bg);

@@ -11,8 +11,7 @@ export type TimelineSettingField =
   | 'BarWidth'
   | 'Draggable'
   | 'MarkerLevel'
-  | 'Position'
-  | 'PreviewPinned';
+  | 'Position';
 
 export type TimelineScrollMode = 'jump';
 
@@ -23,7 +22,6 @@ export interface TimelineSettings {
   readonly hideContainer: boolean;
   readonly draggable: boolean;
   readonly markerLevel: boolean;
-  readonly previewPinned: boolean;
 }
 
 /** Prefix of a site's timeline sync keys: `geminiTimeline<Field>` or `gvTimeline:<site>:<Field>`. */
@@ -67,7 +65,6 @@ export function readTimelineSettings({
     hideContainer: !!read('HideContainer'),
     draggable: !!read('Draggable'),
     markerLevel: !!read('MarkerLevel'),
-    previewPinned: read('PreviewPinned') === true,
   };
   if (!pluginSettings) return fromStorage;
   return {

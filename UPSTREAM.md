@@ -75,3 +75,21 @@ The Chinese compact-style label in vendor/locales/zh/messages.json is shortened 
 1.0.21 (2026-10-28): use the compact neutral gray and opacity for idle ruler ticks, retain active/hover accents, and align compact tick positions and thickness to device pixels.
 
 1.1.0 (2026-10-28): share device-pixel thickness and position alignment between ruler and compact; animate ruler width instead of horizontal transforms so thickness and corner geometry remain fixed.
+
+1.2.0 (2026-10-28): snap the ruler hover crest to the hovered tick region rather than tracking every pointer coordinate; preserve the neighboring falloff and width-only transitions.
+
+1.2.0 styling follow-up: 10px idle ruler/compact ticks, 36px ruler crest, and a narrower 0.9-gap Gaussian falloff; preserve thickness and preview placement.
+
+1.2.0 reference proportion follow-up: ruler widths use the supplied screenshot ratio 52:40:28:20:12 scaled to a 32px peak, with a 12px preview gap measured from the painted tick instead of the invisible hit box. Compact idle width remains 10px.
+
+1.2.0 final sizing: ruler and compact idle widths are 7.5px; ruler expansion reaches only two neighbors on each side, retaining 32px peak and 12px preview gap.
+
+1.2.0 compact preview follow-up: remove active-tick widening and anchor the preview 12px from the visible compact tick edge, including mirrored left-side rails.
+
+1.2.0 equal-step follow-up: ruler widths now use an arithmetic progression from 7.5px to 32px (step 49/6px), retaining two expanded neighbors on each side, fixed thickness and 12px preview spacing.
+
+1.2.0 preview follow-up: keep node full-preview entry visible and clickable; measure individual and full-preview spacing from painted markers at 12px; remove preview-pinning UI, settings reads, and panel behavior.
+
+1.2.0 node list placement: anchor the node full-preview panel 10px from the list button edge; retain other preview spacing.
+
+2.0.0 (2026-10-28): full-preview button uses the existing light platform background and platform accent icon in its resting state; publish the accumulated timeline and preview refinements.

@@ -13,7 +13,7 @@ import { applyPopupBrand } from './theme';
 import { readSettings, settingsPatch, enabledKey } from './settings';
 
 const t=(key:TranslationKey)=>zh[key]?.message ?? key;
-const visible=new Set(['timelineStyle','hideOuterContainer','pinTimelinePreview']);
+const visible=new Set(['timelineStyle','hideOuterContainer']);
 
 function Popup(){
   const [siteId,setSiteId]=useState<string | null>(null);

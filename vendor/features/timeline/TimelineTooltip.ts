@@ -1,6 +1,7 @@
 import type { TimelineStyle } from '@/core/types/common';
 
 import type { DotElement } from './types';
+import { RULER_TICK_WIDTHS, RULER_PREVIEW_GAP } from './denseMarkerLayout';
 
 export interface TimelineTooltipContent {
   text: string;
@@ -135,14 +136,22 @@ export class TimelineTooltip {
     return { text: out, height: Math.min(h, maxH) };
   }
 
+  /** Anchor to the fully extended painted tick, not its wider invisible hit area. */
+  private previewAnchorRect(dot: HTMLElement): DOMRect {
+    const rect = dot.getBoundingClientRect();
+    const center = rect.left + rect.width / 2;
+    if (this.options.getContext().style === 'ruler') {
+      return new DOMRect(center - RULER_TICK_WIDTHS[0], rect.top, RULER_TICK_WIDTHS[0], rect.height);
+    }
+    const width = parseFloat(getComputedStyle(dot, '::after').width) || rect.width;
+    return new DOMRect(center - width / 2, rect.top, width, rect.height);
+  }
+
   private computePlacementInfo(dot: HTMLElement): { placement: 'left' | 'right'; width: number } {
     const tip = this.element || document.body;
-    const dotRect = dot.getBoundingClientRect();
+    const dotRect = this.previewAnchorRect(dot);
     const vw = window.innerWidth;
-    const arrowOut = this.getCSSVarNumber(tip, '--timeline-tooltip-arrow-outside', 6);
-    const baseGap = this.getCSSVarNumber(tip, '--timeline-tooltip-gap-visual', 12);
-    const boxGap = this.getCSSVarNumber(tip, '--timeline-tooltip-gap-box', 8);
-    const gap = baseGap + Math.max(0, arrowOut) + Math.max(0, boxGap);
+    const gap = RULER_PREVIEW_GAP;
     const viewportPad = 8;
     const maxW = this.getCSSVarNumber(tip, '--timeline-tooltip-max', 288);
     const minW = 160;
@@ -252,13 +261,10 @@ export class TimelineTooltip {
   ): void {
     if (!this.element) return;
     const tip = this.element;
-    const dotRect = dot.getBoundingClientRect();
+    const dotRect = this.previewAnchorRect(dot);
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const arrowOut = this.getCSSVarNumber(tip, '--timeline-tooltip-arrow-outside', 6);
-    const baseGap = this.getCSSVarNumber(tip, '--timeline-tooltip-gap-visual', 12);
-    const boxGap = this.getCSSVarNumber(tip, '--timeline-tooltip-gap-box', 8);
-    const gap = baseGap + Math.max(0, arrowOut) + Math.max(0, boxGap);
+    const gap = RULER_PREVIEW_GAP;
     const viewportPad = 8;
     let left: number;
     if (placement === 'left') {

@@ -3,7 +3,7 @@ import type { TimelineStyle } from '@/core/types/common';
 
 import type { TimelineHierarchyGeometry } from './TimelineHierarchyGeometry';
 import { getTimelineSpringProfile } from './TimelineNavigation';
-import { denseMarkerOffsets } from './denseMarkerLayout';
+import { denseMarkerOffsets, RULER_TICK_WIDTHS } from './denseMarkerLayout';
 import type { DotElement, TimelineMarker } from './types';
 
 /** Owns measured marker positions, keyed dot rendering and the runner lifetime. */
@@ -341,7 +341,12 @@ export class TimelineDotLayer {
 
   private readonly onRulerPointerMove = (event: PointerEvent): void => {
     if (event.pointerType === 'touch' || this.options.getStyle() !== 'ruler') return;
-    this.rulerPointerY = event.clientY;
+    // Each tick owns one hover region. Keep the crest at that tick's center
+    // until the pointer enters another region, matching its preview and accent.
+    const dot = event.target instanceof Element
+      ? event.target.closest<HTMLElement>('.timeline-dot') : null;
+    const rect = dot && this.bar?.contains(dot) ? dot.getBoundingClientRect() : null;
+    this.rulerPointerY = rect ? rect.top + rect.height / 2 : null;
     this.updateRulerWave();
   };
 
@@ -350,24 +355,32 @@ export class TimelineDotLayer {
     this.updateRulerWave();
   };
 
-  /** Continuous pointer-distance falloff; resting geometry never follows scrolling. */
+  /** Falloff around the hovered tick; movement inside its region leaves widths unchanged. */
   private updateRulerWave(): void {
     const ruler = this.options.getStyle() === 'ruler';
     if (!ruler) this.rulerPointerY = null;
     const dots = [...this.dots.values()].filter(dot => dot.isConnected);
-    const gap = parseFloat(this.bar?.style.getPropertyValue('--lite-ruler-gap') || '14');
-    const sigma = Math.max(1, gap) * 1.35;
-    for (const dot of dots) {
-      if (!ruler) {
-        dot.style.removeProperty('--gv-timeline-ruler-scale');
-        continue;
-      }
+    const ordered = dots.map(dot => {
       const rect = dot.getBoundingClientRect();
-      const distance = this.rulerPointerY === null ? Infinity
-        : this.rulerPointerY - (rect.top + rect.height / 2);
-      const crest = Math.exp(-(distance * distance) / (2 * sigma * sigma));
-      dot.style.setProperty('--gv-timeline-ruler-scale', (1 + (5 / 3) * crest).toFixed(4));
+      return { dot, center: rect.top + rect.height / 2 };
+    }).sort((a, b) => a.center - b.center);
+    let hovered = -1;
+    if (ruler && this.rulerPointerY !== null) {
+      let nearest = Infinity;
+      ordered.forEach(({ center }, index) => {
+        const distance = Math.abs(center - this.rulerPointerY!);
+        if (distance < nearest) { nearest = distance; hovered = index; }
+      });
     }
+    ordered.forEach(({ dot }, index) => {
+      if (!ruler) {
+        dot.style.removeProperty('--gv-timeline-ruler-width');
+        return;
+      }
+      const lastRank = RULER_TICK_WIDTHS.length - 1;
+      const rank = hovered < 0 ? lastRank : Math.min(lastRank, Math.abs(index - hovered));
+      dot.style.setProperty('--gv-timeline-ruler-width', `${RULER_TICK_WIDTHS[rank]}px`);
+    });
   }
 
   private buildCompactMarkerOffsets(hiddenIndices: ReadonlySet<number>): Map<number, number> {

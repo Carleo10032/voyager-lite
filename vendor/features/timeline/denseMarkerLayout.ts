@@ -1,3 +1,7 @@
+// Equal width steps from the 32px crest to the 7.5px resting tick.
+export const RULER_TICK_WIDTHS = [32, 143 / 6, 47 / 3, 7.5] as const;
+export const RULER_PREVIEW_GAP = 12;
+
 const DENSE_MAX_GAP_PX = 8;
 const DENSE_MAX_SPAN_PX = 160;
 

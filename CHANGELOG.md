@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.0 — 2026-10-28
+
+- Use a light platform-colored background and platform accent icon for the full-preview button at rest.
+- Publish the updated ruler interaction, compact alignment, node previews and spacing improvements developed in 1.2.0.
+- Remove preview pinning; retain instant centered navigation.
+
+## 1.2.0 — 2026-10-28
+
+- Anchor the ruler hover wave to the hovered tick's center, matching its preview and accent.
+- Keep lengths fixed while moving within a tick region; change the crest only when entering another region.
+- Retain width-only transitions, pixel-aligned thickness, and instant navigation.
+- Use 7.5px idle ruler and compact ticks. Limit ruler expansion to two neighbors on each side: 32 / 23.83 / 15.67 / 7.5px in equal steps, keeping a 12px preview gap.
+- Keep every compact tick at 7.5px, including the active tick; measure its 12px preview gap from the painted tick edge.
+
+- Keep the node full-preview button visible, use 12px spacing for individual previews and compact full previews, position the node full preview 10px from its button, and remove preview pinning including legacy saved behavior.
+
 ## 1.1.0 — 2026-10-28
 
 - Align ruler tick positions and thickness to device pixels, matching the compact fix.

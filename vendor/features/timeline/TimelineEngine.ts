@@ -33,7 +33,6 @@ export class TimelineEngine {
     'HideContainer',
     'Draggable',
     'MarkerLevel',
-    'PreviewPinned',
   ];
   private readonly state: TimelineState;
   private readonly geometry: TimelineHierarchyGeometry;
@@ -133,7 +132,6 @@ export class TimelineEngine {
     // Levels follow the style too: they have a shape only on the dots rail.
     if (changed('markerLevel')) this.setMarkerLevelEnabled(next.markerLevel);
     else if (changed('style')) this.applyMarkerLevel();
-    if (changed('previewPinned')) this.view.previewPanel?.setPinned(next.previewPinned);
   }
   private mountUI(): void {
     this.view.mount();
@@ -247,7 +245,6 @@ export class TimelineEngine {
         [this.settingKey('Draggable')]: false,
         [this.settingKey('MarkerLevel')]: false,
         [this.settingKey('Position')]: null,
-        [this.settingKey('PreviewPinned')]: false,
         [StorageKeys.LANGUAGE]: null,
       };
 
@@ -297,7 +294,6 @@ export class TimelineEngine {
       this.view.applyTimelineStyle();
       this.view.toggleDraggable(settings.draggable);
       this.setMarkerLevelEnabled(settings.markerLevel);
-      this.view.previewPanel?.setPinned(settings.previewPinned);
       this.view.rtl = applyRTLClass(res?.[StorageKeys.LANGUAGE] as string | null | undefined);
 
       this.view.placement.restorePosition(

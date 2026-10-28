@@ -8,18 +8,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--timeline-bar-bg);
+  background: var(--lite-brand-soft);
   border: 1px solid var(--timeline-tooltip-border);
   cursor: pointer;
   padding: 0;
-  color: var(--timeline-dot-color);
+  color: var(--timeline-dot-active-color);
   border-radius: 6px;
   transition:
     color 0.15s ease,
     background-color 0.15s ease,
     opacity 0.15s ease;
   z-index: 2147483646;
-  opacity: 0;
+  opacity: 1;
 }
 
 .gemini-timeline-bar:hover ~ .timeline-preview-toggle,

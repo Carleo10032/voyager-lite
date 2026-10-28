@@ -14,7 +14,6 @@ export interface TimelineSettingsValues {
   timelineStyle: TimelineStyle;
   hideContainer: boolean;
   draggableTimeline: boolean;
-  timelinePreviewPinned: boolean;
   preventAutoScrollEnabled: boolean;
   markerLevelEnabled: boolean;
   showMessageTimestamps: boolean;
@@ -91,16 +90,6 @@ export function TimelineSettingsCard({
           checked={values.hideContainer}
           disabled={containerless}
           onChange={(hideContainer) => onChange({ hideContainer })}
-          isVisible={isVisible}
-          t={t}
-        />
-        <SettingToggleRow
-          id="timeline-preview-pinned"
-          settingId="pinTimelinePreview"
-          label="pinTimelinePreview"
-          hint="pinTimelinePreviewHint"
-          checked={values.timelinePreviewPinned}
-          onChange={(timelinePreviewPinned) => onChange({ timelinePreviewPinned })}
           isVisible={isVisible}
           t={t}
         />

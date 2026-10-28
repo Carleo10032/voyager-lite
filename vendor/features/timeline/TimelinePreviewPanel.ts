@@ -25,7 +25,6 @@ export class TimelinePreviewPanel {
   private searchInput: HTMLInputElement | null = null;
   private toggleBtn: HTMLElement | null = null;
   private _isOpen = false;
-  private _isPinned = false;
   private _isCompactMode = false;
   private floatingToggleSuppressed = false;
   private markers: ReadonlyArray<PreviewMarkerData> = [];
@@ -67,10 +66,6 @@ export class TimelinePreviewPanel {
     return this._isOpen;
   }
 
-  get isPinned(): boolean {
-    return this._isPinned;
-  }
-
   init(
     onNavigate: (turnId: string, index: number) => void,
     onSearchChange?: (query: string) => void,
@@ -105,11 +100,6 @@ export class TimelinePreviewPanel {
     if (this._isOpen) this.positionPanel();
   }
 
-  setPinned(pinned: boolean): void {
-    if (this._isPinned === pinned) return;
-    this._isPinned = pinned;
-  }
-
   setCompactMode(compact: boolean): void {
     const changed = this._isCompactMode !== compact;
     this._isCompactMode = compact;
@@ -134,7 +124,7 @@ export class TimelinePreviewPanel {
       this.anchorElement.removeAttribute('aria-label');
       this.anchorElement.removeAttribute('aria-expanded');
       this.hoverBridgeEl?.classList.remove(PREVIEW_HOVER_BRIDGE_VISIBLE_CLASS);
-      if (this._isOpen && !this._isPinned) this.close();
+      if (this._isOpen) this.close();
     }
   }
 
@@ -277,7 +267,8 @@ export class TimelinePreviewPanel {
     // Toggle button — fixed position to the left of the timeline bar
     this.toggleBtn = document.createElement('button');
     this.toggleBtn.className = 'timeline-preview-toggle';
-    this.toggleBtn.setAttribute('aria-label', 'Toggle preview panel');
+    this.toggleBtn.setAttribute('aria-label', '完整预览');
+    this.toggleBtn.title = '完整预览';
     this.toggleBtn.setAttribute('aria-pressed', 'false');
     this.toggleBtn.innerHTML = LIST_ICON_SVG;
     this.toggleBtn.addEventListener('click', (e) => {
@@ -328,7 +319,6 @@ export class TimelinePreviewPanel {
     // Click outside to close
     this.onDocumentPointerDown = (e: PointerEvent) => {
       if (!this._isOpen) return;
-      if (this._isPinned) return;
       const target = e.target as Node;
       if (
         this.panelEl?.contains(target) ||
@@ -344,7 +334,6 @@ export class TimelinePreviewPanel {
     // Escape to close
     this.onKeyDown = (e: KeyboardEvent) => {
       if (!this._isOpen) return;
-      if (this._isPinned) return;
       if (e.key === 'Escape') {
         e.stopPropagation();
         this.close();
@@ -446,11 +435,11 @@ export class TimelinePreviewPanel {
   }
 
   private scheduleCompactClose(): void {
-    if (!this._isCompactMode || this._isPinned) return;
+    if (!this._isCompactMode) return;
     this.cancelCompactClose();
     this.compactCloseTimer = window.setTimeout(() => {
       this.compactCloseTimer = null;
-      if (!this._isCompactMode || this._isPinned) return;
+      if (!this._isCompactMode) return;
       this.close();
     }, COMPACT_CLOSE_DELAY_MS);
   }
@@ -507,8 +496,10 @@ export class TimelinePreviewPanel {
   private positionPanel(): void {
     if (!this.panelEl) return;
     const barRect = this.anchorElement.getBoundingClientRect();
-    const panelWidth = PREVIEW_PANEL_WIDTH_PX;
-    const gap = PREVIEW_PANEL_GAP_PX;
+    const panelWidth = this.panelEl.offsetWidth || PREVIEW_PANEL_WIDTH_PX;
+    const buttonAnchor = !this._isCompactMode && !this.floatingToggleSuppressed
+      ? this.toggleBtn?.getBoundingClientRect() : null;
+    const gap = buttonAnchor ? 10 : PREVIEW_PANEL_GAP_PX;
     const maxHeight = this._isCompactMode
       ? Math.min(700, window.innerHeight * 0.82)
       : Math.min(500, window.innerHeight * 0.7);
@@ -516,21 +507,40 @@ export class TimelinePreviewPanel {
     // RTL moves the default catalog rail left, so its preview must follow that side too.
     const isRTL = this.railPosition === 'left' || this.isRTLContext();
 
+    // Compact paints only ticks; measure the gap from their visible edge,
+    // rather than from the wider invisible rail hit area.
+    let anchorLeft = barRect.left;
+    let anchorRight = barRect.right;
+    const tick = this.anchorElement.querySelector<HTMLElement>('.timeline-dot');
+    if (tick) {
+      const rect = tick.getBoundingClientRect();
+      const style = getComputedStyle(tick, '::after');
+      const width = parseFloat(style.width);
+      const center = rect.left + rect.width / 2;
+      const compact = this._isCompactMode;
+      const extendsRight = compact && this.anchorElement.classList.contains('gv-timeline-ruler-inward-right');
+      anchorLeft = compact ? (extendsRight ? center : center - width) : center - width / 2;
+      anchorRight = compact ? (extendsRight ? center + width : center) : center + width / 2;
+    }
+    if (buttonAnchor) {
+      anchorLeft = buttonAnchor.left;
+      anchorRight = buttonAnchor.right;
+    }
     let left: number;
     if (isRTL) {
       // In RTL, bar is on the left — place panel to its right
-      left = barRect.right + gap;
+      left = anchorRight + gap;
       if (left + panelWidth > window.innerWidth - 8) {
         left = window.innerWidth - panelWidth - 8;
       }
     } else {
       // In LTR, bar is on the right — place panel to its left
-      left = barRect.left - panelWidth - gap;
+      left = anchorLeft - panelWidth - gap;
       if (left < 8) left = 8;
     }
 
     this.panelEl.style.maxHeight = `${Math.round(maxHeight)}px`;
-    this.panelEl.style.left = `${Math.round(left)}px`;
+    this.panelEl.style.left = `${left}px`;
 
     // Measure actual rendered height to center properly (works for both few and many items)
     const panelHeight = this.panelEl.offsetHeight || maxHeight;
