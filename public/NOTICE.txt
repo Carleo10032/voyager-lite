@@ -1,4 +1,4 @@
-Voyager Lite 2.1.1 — unofficial derivative, modified 2026-10-28.
+Voyager Lite 2.2.0 — unofficial derivative, modified 2026-10-28.
 Based on Voyager 1.9.0: https://github.com/voyager-crew/voyager
 Upstream revision: e854e349ef8de867e6dc587033e46425320a165f
 Copyright (c) 2022 Jonathan Braat
@@ -6,7 +6,7 @@ Copyright (c) 2026 Jesse Zhang
 
 Distributed under GNU GPL version 3; see LICENSE.
 Corresponding source and build instructions:
-See accompanying Voyager-Lite-2.1.1-source.zip.
+See accompanying Voyager-Lite-2.2.0-source.zip.
 Source archives are provided alongside the installation archive:
 https://github.com/Carleo10032/voyager-lite
 

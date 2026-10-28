@@ -106,8 +106,13 @@ export class TimelineView {
   // read as a stray full-height bar, so nothing of the rail shows until a marker exists.
   private applyEmptyState(): void {
     const empty = this.markers.length === 0;
-    this.ui.timelineBar?.classList.toggle(EMPTY_RAIL_CLASS, empty);
+    const bar = this.ui.timelineBar;
+    const wasEmpty = bar?.classList.contains(EMPTY_RAIL_CLASS);
+    bar?.classList.toggle(EMPTY_RAIL_CLASS, empty);
     this.ui.slider?.classList.toggle(EMPTY_RAIL_CLASS, empty);
+    // Initial positioning may have measured a display:none rail before turns loaded.
+    // Measure again only after restoring its visible geometry.
+    if (wasEmpty && !empty) this.previewPanel?.reposition();
   }
   startRunner(fromIdx: number, toIdx: number, duration: number): void {
     this.dotLayer.startRunner(fromIdx, toIdx, duration);

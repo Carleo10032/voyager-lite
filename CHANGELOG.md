@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.0 — 2026-10-28
+
+- Reposition the full-preview button when conversation turns first appear, fixing its missing position after initial load or refresh.
+- Fix the node container width at the default 4px; remove drag resizing and ignore previously saved widths.
+
 ## 2.1.1 — 2026-10-28
 
 - Prevent accidental text selection when repeatedly clicking popup controls; keep error messages selectable.

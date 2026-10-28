@@ -99,3 +99,5 @@ The Chinese compact-style label in vendor/locales/zh/messages.json is shortened 
 2.1.0 (2026-10-28): adapt popup height to visible settings and remove the reserved scrollbar gutter.
 
 2.1.1 (2026-10-28): prevent native text selection in popup controls while preserving selectable error messages.
+
+2.2.0 (2026-10-28): reposition the full-preview toggle after the empty rail becomes visible; remove container width resizing and ignore legacy widths in favor of the 4px default.

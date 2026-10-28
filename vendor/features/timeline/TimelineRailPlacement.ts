@@ -10,16 +10,11 @@ interface TimelineRailPlacementOptions {
   onPositionRestore: () => void;
 }
 
-/** Owns rail resize/drag arbitration, responsive placement and persisted width/position. */
+/** Owns rail placement; Lite fixes the visual container width at its default. */
 export class TimelineRailPlacement {
-  barWidth = 4;
-  readonly barWidthMin = 4;
-  readonly barWidthMax = 24;
+  readonly barWidth = 4;
   savedPosition: TimelinePositionData | null = null;
   private bar: HTMLElement | null = null;
-  private resizing = false;
-  private onResizeMove: ((ev: PointerEvent) => void) | null = null;
-  private onResizeUp: ((ev: PointerEvent) => void) | null = null;
   private draggable = false;
   private barDragging = false;
   private barStartPos = { x: 0, y: 0 };
@@ -30,11 +25,8 @@ export class TimelineRailPlacement {
 
   constructor(private readonly options: TimelineRailPlacementOptions) {}
 
-  restoreWidth(value: unknown): boolean {
-    if (typeof value === 'number' && value >= this.barWidthMin && value <= this.barWidthMax) {
-      this.barWidth = value;
-      return true;
-    }
+  // Lite keeps the default width, ignoring widths saved by older versions.
+  restoreWidth(_value: unknown): boolean {
     return false;
   }
 
@@ -58,11 +50,6 @@ export class TimelineRailPlacement {
     const signal = this.lifetime.signal;
     const onBarPointerDown = (ev: PointerEvent) => {
       if ((ev.target as HTMLElement).closest('.timeline-dot, .timeline-thumb')) return;
-      // Resize takes priority over position drag, even when dragging is disabled.
-      if (this.isInResizeEdge(ev)) {
-        this.startResize(ev);
-        return;
-      }
       if (!this.draggable) return;
       this.barDragging = true;
       this.barStartPos = { x: ev.clientX, y: ev.clientY };
@@ -77,72 +64,12 @@ export class TimelineRailPlacement {
       window.addEventListener('pointercancel', this.onBarPointerUp, { signal });
     };
     this.bar.addEventListener('pointerdown', onBarPointerDown, { signal });
-    const onBarCursorMove = (ev: PointerEvent) => {
-      if (this.resizing || this.barDragging) return;
-      if (this.isInResizeEdge(ev)) this.bar!.style.cursor = 'ew-resize';
-      else if (this.draggable) this.bar!.style.cursor = 'move';
+    const onBarCursorMove = () => {
+      if (this.barDragging) return;
+      if (this.draggable) this.bar!.style.cursor = 'move';
       else this.bar!.style.cursor = '';
     };
     this.bar.addEventListener('pointermove', onBarCursorMove, { signal });
-  }
-
-  /** The visual background is centered inside the 24px rail used by dots. */
-  private isInResizeEdge(ev: PointerEvent): boolean {
-    if (this.options.getStyle() !== 'dots') return false;
-    if (!this.bar) return false;
-    const rect = this.bar.getBoundingClientRect();
-    const barCenter = rect.left + rect.width / 2;
-    const halfWidth = this.barWidth / 2;
-    const ZONE = 6;
-    const leftEdge = barCenter - halfWidth;
-    const rightEdge = barCenter + halfWidth;
-    const nearLeft = ev.clientX >= leftEdge - 2 && ev.clientX <= leftEdge + ZONE;
-    const nearRight = ev.clientX >= rightEdge - ZONE && ev.clientX <= rightEdge + 2;
-    return nearLeft || nearRight;
-  }
-
-  private startResize(ev: PointerEvent): void {
-    this.resizing = true;
-    this.bar!.classList.add('timeline-resizing');
-    this.bar!.setPointerCapture(ev.pointerId);
-    const barRect = this.bar!.getBoundingClientRect();
-    const barCenterX = barRect.left + barRect.width / 2;
-    this.onResizeMove = (e: PointerEvent) => {
-      const dist = Math.abs(e.clientX - barCenterX);
-      this.barWidth = Math.max(this.barWidthMin, Math.min(this.barWidthMax, dist * 2));
-      this.options.onWidthChange();
-    };
-    this.onResizeUp = () => {
-      this.resizing = false;
-      this.bar?.classList.remove('timeline-resizing');
-      window.removeEventListener('pointermove', this.onResizeMove!);
-      window.removeEventListener('pointerup', this.onResizeUp!);
-      window.removeEventListener('pointercancel', this.onResizeUp!);
-      this.onResizeMove = null;
-      this.onResizeUp = null;
-      this.saveBarWidth();
-    };
-    const signal = this.lifetime.signal;
-    window.addEventListener('pointermove', this.onResizeMove, { signal });
-    // A cancelled touch resize must end the gesture and persist its final width too.
-    window.addEventListener('pointerup', this.onResizeUp, { signal });
-    window.addEventListener('pointercancel', this.onResizeUp, { signal });
-    ev.preventDefault();
-    ev.stopPropagation();
-  }
-
-  private saveBarWidth(): void {
-    const g = globalThis as ExtGlobal;
-    const value = Math.round(this.barWidth);
-    if (g.chrome?.storage?.sync?.set) {
-      g.chrome.storage.sync.set({
-        [`${this.options.storagePrefix ?? 'geminiTimeline'}BarWidth`]: value,
-      });
-    } else if (g.browser?.storage?.sync?.set) {
-      g.browser.storage.sync.set({
-        [`${this.options.storagePrefix ?? 'geminiTimeline'}BarWidth`]: value,
-      });
-    }
   }
 
   toggleDraggable(_enabled: boolean): void {
