@@ -20,6 +20,7 @@ const TIMELINE_PAGE_NODES = [
   '.timeline-preview-panel',
   '.gv-timeline-preview-hover-bridge',
   '#gemini-timeline-tooltip',
+  '.gv-navigation-loading',
 ].join(',');
 interface TimelineViewOptions {
   mountAnchor?: HTMLElement;
@@ -45,6 +46,37 @@ export class TimelineView {
   timelineStyle: TimelineStyle = 'dots';
 
   hideContainer: boolean = false;
+
+  private navigationIndicator: HTMLElement | null = null;
+  private pendingTurnId: string | null = null;
+
+  setNavigationPending(id: string | null): void {
+    this.pendingTurnId = id;
+    if (!id || this.destroyed) {
+      this.navigationIndicator?.remove();
+      this.navigationIndicator = null;
+      return;
+    }
+    const bar = this.ui.timelineBar;
+    if (!bar) return;
+    if (!this.navigationIndicator) {
+      const indicator = document.createElement("span");
+      indicator.className = "gv-navigation-loading";
+      indicator.setAttribute("role", "status");
+      indicator.setAttribute("aria-label", "正在定位消息");
+      indicator.title = "正在定位消息";
+      (this.options.mountAnchor ?? document.body).append(indicator);
+      this.navigationIndicator = indicator;
+    }
+    const dot = Array.from(bar.querySelectorAll<HTMLElement>(".timeline-dot"))
+      .find((node) => node.dataset.targetTurnId === id);
+    const rect = (dot ?? bar).getBoundingClientRect();
+    this.navigationIndicator.style.top = `${rect.top + rect.height / 2 - 6}px`;
+    // Use the shared rail edge, not the ruler's oversized hover hit box.
+    const edge = bar.getBoundingClientRect().right;
+    const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+    this.navigationIndicator.style.left = `${Math.max(0, Math.min(edge + 1, viewportWidth - 14))}px`;
+  }
 
   private firstUserTurnOffset = 0;
 
@@ -216,6 +248,7 @@ export class TimelineView {
   }
   updateActiveDotUI(): void {
     this.dotLayer.updateActive();
+    this.setNavigationPending(this.pendingTurnId);
     this.previewPanel?.updateActiveTurn(this.activeTurnId);
   }
   updatePreviewMarkers(): void {
@@ -251,6 +284,7 @@ export class TimelineView {
     }
   }
   destroy(): void {
+    this.setNavigationPending(null);
     this.destroyed = true;
 
     this.lifetime.abort();

@@ -706,3 +706,21 @@ html[data-gv-scheme='dark'] .timeline-left-slider::before {
 .gemini-timeline-bar .timeline-dot::after {
   filter: none !important;
 }
+
+/* Delayed navigation feedback lives beside the target without shifting the rail. */
+.gv-navigation-loading {
+  position: fixed;
+  z-index: 2147483647;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 1.5px solid color-mix(in srgb, var(--timeline-dot-active-color, #5365d9) 22%, transparent);
+  border-top-color: var(--timeline-dot-active-color, #5365d9);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: gv-navigation-spin 0.8s linear infinite;
+}
+@keyframes gv-navigation-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .gv-navigation-loading { animation: none; }
+}

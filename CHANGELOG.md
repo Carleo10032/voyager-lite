@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.2.3 — 2026-11-01
+
+- Place navigation loading feedback to the right of the shared rail, away from left-side previews, and clamp it inside the viewport.
+
+## 2.2.2 — 2026-11-01
+
+- Stop navigation once the target bubble is readable in the viewport instead of repeatedly recentering it.
+
+## 2.2.1 — 2026-11-01
+
+- Fix distant navigation from the middle of long replies when no user bubble is visible.
+- Keep correcting the landing position while layout changes, and restore the visible selection when navigation fails or is cancelled.
+- Show a small loading indicator beside the target only when positioning takes longer than 200 ms; fast arrivals do not flash.
+
 ## 2.2.0 — 2026-10-28
 
 - Reposition the full-preview button when conversation turns first appear, fixing its missing position after initial load or refresh.

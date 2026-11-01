@@ -101,3 +101,9 @@ The Chinese compact-style label in vendor/locales/zh/messages.json is shortened 
 2.1.1 (2026-10-28): prevent native text selection in popup controls while preserving selectable error messages.
 
 2.2.0 (2026-10-28): reposition the full-preview toggle after the empty rail becomes visible; remove container width resizing and ignore legacy widths in favor of the 4px default.
+
+2.2.1 (2026-11-01): fix virtualized navigation from long reply gaps, keep alignment corrections until settled or timed out, restore selection on cancellation/failure, and add delayed navigation feedback.
+
+2.2.2 (2026-11-01): stop correcting once the target is readable in the viewport.
+
+2.2.3 (2026-11-01): place delayed loading feedback to the right of the shared rail, clear of left-side previews.

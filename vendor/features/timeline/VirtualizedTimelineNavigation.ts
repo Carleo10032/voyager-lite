@@ -15,7 +15,7 @@ const NAVIGATION_ACTIVE_LOCK_MS = 900;
 const PENDING_NAVIGATION_TIMEOUT_MS = 8000;
 const PENDING_NAVIGATION_HOP_MS = 80;
 const SETTLED_READS = 3;
-const MAX_ALIGNMENT_CORRECTIONS = 2;
+const LOADING_DELAY_MS = 200;
 
 type NavigationMarker = TimelineNavigationMarker;
 
@@ -70,7 +70,7 @@ export class VirtualizedTimelineNavigation {
   private pendingOffset: number | null = null;
   private pendingDestination: number | null = null;
   private pendingStableReads = 0;
-  private pendingCorrections = 0;
+  private pendingStartedAt = 0;
   private lastHandledHash: string | null = null;
   private scrollTarget: HTMLElement | Window | null = null;
   private stopScrollListener: Dispose | null = null;
@@ -79,6 +79,7 @@ export class VirtualizedTimelineNavigation {
     private readonly getViewport: () => HTMLElement | null,
     private readonly getMarkers: () => readonly NavigationMarker[],
     private readonly onActiveChange: (turnId: string | null, previousTurnId: string | null) => void,
+    private readonly onPendingChange: (turnId: string | null) => void = () => {},
   ) {}
 
   private get markers(): readonly NavigationMarker[] {
@@ -195,7 +196,7 @@ export class VirtualizedTimelineNavigation {
     this.pendingOffset = null;
     this.pendingDestination = null;
     this.pendingStableReads = 0;
-    this.pendingCorrections = 0;
+    this.pendingStartedAt = Date.now();
     this.pendingNavigationUntil = Date.now() + PENDING_NAVIGATION_TIMEOUT_MS;
     this.pendingNavigationLo = 0;
     this.pendingNavigationHi = Math.max(
@@ -214,14 +215,29 @@ export class VirtualizedTimelineNavigation {
 
   private clearPendingNavigation(): void {
     this.pendingNavigationId = null;
+    this.onPendingChange(null);
     void this.stopPendingNavigationTimer?.();
     this.stopPendingNavigationTimer = null;
     for (const stop of this.stopUserScrollListeners.splice(0)) void stop();
   }
 
   private cancelPendingNavigationOnUserScroll = (): void => {
-    this.clearPendingNavigation();
+    this.finishPendingNavigation(false);
   };
+
+  private finishPendingNavigation(arrived: boolean): void {
+    this.clearPendingNavigation();
+    if (!arrived) {
+      this.navigationActiveLockUntil = 0;
+      this.measure();
+      const reference = this.getScrollTop() + this.getViewportHeight() * ACTIVE_ANCHOR;
+      const mounted = this.markers.filter((marker) => isRenderedTarget(marker.element));
+      const nearest = mounted.reduce<NavigationMarker | undefined>((best, marker) =>
+        !best || Math.abs(this.centerOf(marker.element) - reference) <
+          Math.abs(this.centerOf(best.element) - reference) ? marker : best, undefined);
+      this.setActiveTurn(nearest?.id ?? null);
+    }
+  }
 
   /**
    * One homing step toward a virtualized-out turn: bisect on the target's
@@ -233,22 +249,35 @@ export class VirtualizedTimelineNavigation {
     this.stopPendingNavigationTimer = null;
     if (!this.pendingNavigationId || this.disposed) return;
     if (Date.now() > this.pendingNavigationUntil) {
-      this.clearPendingNavigation();
+      this.finishPendingNavigation(false);
       return;
     }
     const marker = this.markers.find((item) => item.id === this.pendingNavigationId);
     if (!marker) {
-      this.clearPendingNavigation();
+      this.finishPendingNavigation(false);
       return;
     }
     this.navigationActiveLockUntil = Date.now() + NAVIGATION_ACTIVE_LOCK_MS;
     if (isRenderedTarget(marker.element)) {
       const target = this.getScrollTarget(marker.element);
+      // Once readable, stop chasing exact centering as the host reflows.
+      const rect = marker.element.getBoundingClientRect();
+      const viewportTop = this.getViewportTop();
+      const viewportBottom = viewportTop + this.getViewportHeight();
+      const readable = rect.height <= this.getViewportHeight()
+        ? rect.top >= viewportTop && rect.bottom <= viewportBottom
+        : rect.top <= viewportTop && rect.bottom >= viewportBottom;
+      if (readable) {
+        this.clearPendingNavigation();
+        return;
+      }
       const offset = this.getScrollTop();
       const destination = Math.min(
         Math.max(0, this.getScrollHeight() - this.getViewportHeight()),
         elementCenterDestination(target, marker.element),
       );
+      if (Math.abs(destination - offset) > 3 && Date.now() - this.pendingStartedAt >= LOADING_DELAY_MS)
+        this.onPendingChange(marker.id);
       // Wait for both the scroll and the target's document position to settle.
       // A mounted bubble can move when preceding replies finish rendering.
       const stable = this.pendingOffset !== null && this.pendingDestination !== null &&
@@ -260,16 +289,17 @@ export class VirtualizedTimelineNavigation {
         this.schedulePendingNavigationHop();
         return;
       }
-      if (Math.abs(destination - offset) <= 3 || this.pendingCorrections >= MAX_ALIGNMENT_CORRECTIONS) {
+      if (Math.abs(destination - offset) <= 3) {
         this.clearPendingNavigation();
         return;
       }
-      this.pendingCorrections++;
       this.pendingStableReads = 0;
       scrollElementToAnchor(target, marker.element, offset, this.getViewportHeight(), 'instant');
       this.schedulePendingNavigationHop();
       return;
     }
+    if (Date.now() - this.pendingStartedAt >= LOADING_DELAY_MS)
+      this.onPendingChange(marker.id);
     // Reacquire an unmounted target by marker identity, not its stale DOM box.
     this.pendingOffset = null;
     this.pendingDestination = null;
@@ -279,24 +309,17 @@ export class VirtualizedTimelineNavigation {
       return acc;
     }, []);
     if (mountedIndexes.length) {
-      // Direction info is only trustworthy once the mounted window has caught
-      // up with the last jump; otherwise wait a tick instead of moving.
-      const windowCurrent = mountedIndexes.some((index) =>
-        this.isElementInViewport(this.markers[index].element),
-      );
-      if (!windowCurrent) {
-        this.schedulePendingNavigationHop();
-        return;
-      }
+      // Offscreen bubbles still bracket a long reply. Requiring a bubble in
+      // the viewport deadlocks navigation when the reader scrolls into that reply.
       const targetIndex = this.markers.indexOf(marker);
       const firstMounted = mountedIndexes[0];
       const lastMounted = mountedIndexes[mountedIndexes.length - 1];
       if (targetIndex < firstMounted) {
-        this.pendingNavigationHi = Math.min(this.pendingNavigationHi, this.getScrollTop());
+        this.pendingNavigationHi = Math.min(this.pendingNavigationHi, this.centerOf(this.markers[firstMounted].element));
       } else if (targetIndex > lastMounted) {
         this.pendingNavigationLo = Math.max(
           this.pendingNavigationLo,
-          this.getScrollTop() + this.getViewportHeight(),
+          this.centerOf(this.markers[lastMounted].element),
         );
       } else {
         // Inside a virtualization gap: bracket the target between its nearest
@@ -326,7 +349,7 @@ export class VirtualizedTimelineNavigation {
       }
     }
     if (this.pendingNavigationHi - this.pendingNavigationLo < 1) {
-      this.clearPendingNavigation();
+      this.finishPendingNavigation(false);
       return;
     }
     const staleCenterUsable =
@@ -347,13 +370,6 @@ export class VirtualizedTimelineNavigation {
       this.homePendingNavigation,
       PENDING_NAVIGATION_HOP_MS,
     );
-  }
-
-  private isElementInViewport(element: HTMLElement): boolean {
-    const rect = element.getBoundingClientRect();
-    const top = this.getViewportTop();
-    const bottom = top + this.getViewportHeight();
-    return rect.bottom >= top && rect.top <= bottom;
   }
 
   handleHash = (): void => {

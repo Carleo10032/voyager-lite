@@ -72,6 +72,7 @@ export class TimelineEngine {
           : this.maybeRefreshMarkersForInteraction(target),
       resolveStoredId: (id) => this.state.resolveMarkerIdForStorageId(id),
       onActiveChange: () => this.view.updateActiveDotUI(),
+      onPendingChange: (id) => this.view?.setNavigationPending(id),
       onScroll: () => {
         this.view.syncTimelineTrackToMain();
         this.view.updateVirtualRangeAndRender();
