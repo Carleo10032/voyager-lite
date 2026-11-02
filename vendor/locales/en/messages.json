@@ -1,4 +1,5 @@
 {
+  "timelineAttachmentPlaceholder": { "message": "[Attachment]", "description": "Attachment-only message label" },
   "extName": {
     "message": "Voyager",
     "description": "Extension name"

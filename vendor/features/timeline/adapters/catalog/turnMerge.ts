@@ -29,6 +29,8 @@ export interface Marker {
   id: string;
   hash: string;
   summary: string;
+  attachmentPlaceholder?: boolean;
+  displaySummary?: string;
   starred: boolean;
   starredAt?: number;
   /** Last-seen element; disconnected once the host virtualizes the turn out. */
@@ -48,6 +50,8 @@ export interface MountedTurn {
   readonly hostTurnId?: string;
   readonly element: HTMLElement;
   readonly summary: string;
+  readonly attachmentPlaceholder?: boolean;
+  readonly displaySummary?: string;
 }
 
 interface MountedEntry extends MountedTurn {
@@ -447,6 +451,8 @@ export function mergeMountedTurns(
       hostTurnId: entry.hostTurnId,
       hash: entry.hash,
       summary: entry.summary,
+      attachmentPlaceholder: entry.attachmentPlaceholder,
+      displaySummary: entry.displaySummary,
       starred: false,
       element: entry.element,
       center: entry.center,
@@ -478,6 +484,8 @@ export function mergeMountedTurns(
       anchorDrift.set(knownIndex, mounted[i].center - survivor.center);
       survivor.element = mounted[i].element;
       survivor.summary = mounted[i].summary;
+      survivor.attachmentPlaceholder = mounted[i].attachmentPlaceholder;
+      survivor.displaySummary = mounted[i].displaySummary;
       survivor.hash = mounted[i].hash;
       survivor.hostTurnId = mounted[i].hostTurnId ?? survivor.hostTurnId;
       mounted[i].element.setAttribute(TURN_ID_ATTR, survivor.id);

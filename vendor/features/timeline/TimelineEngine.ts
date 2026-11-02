@@ -1,8 +1,9 @@
 import { StorageKeys } from '@/core/types/common';
 import { applyRTLClass } from '@/core/utils/rtl';
-import { initI18n } from '@/utils/i18n';
+import { getTranslationSync, initI18n, onCachedLanguageChange } from '@/utils/i18n';
 
 import type { TimelineAdapter, TimelineTimestampOwner } from './TimelineAdapter';
+import { displayTurnSummary } from './adapters/catalog/turnHash';
 import { TimelineHierarchyGeometry } from './TimelineHierarchyGeometry';
 import { TimelineMarkerInteractions } from './TimelineMarkerInteractions';
 import { TimelineNavigation } from './TimelineNavigation';
@@ -49,6 +50,7 @@ export class TimelineEngine {
   /** The settings the rail shows; later changes apply only the knobs that differ. */
   private applied: TimelineSettings | null = null;
   private markerLevelSwitch = false;
+  private readonly unsubscribeLanguage: () => void;
   // A scope aborts before awaiting pending startup, so old teardown cannot touch a newly mounted rail.
   constructor(
     private readonly adapter: TimelineAdapter,
@@ -92,6 +94,7 @@ export class TimelineEngine {
       position: adapter.mount.position === 'auto' ? undefined : adapter.mount.position,
     });
     this.timestamps = adapter.timestamps(this.state);
+    this.unsubscribeLanguage = onCachedLanguageChange(() => this.recalculateAndRenderMarkers());
     ownerSignal?.addEventListener('abort', this.onOwnerAbort, { once: true });
     if (ownerSignal?.aborted) this.destroy();
   }
@@ -203,6 +206,7 @@ export class TimelineEngine {
     if (this.destroyed) return;
     this.destroyed = true;
     this.lifetime.abort();
+    this.unsubscribeLanguage();
     this.ownerSignal?.removeEventListener('abort', this.onOwnerAbort);
     this.unregisterSyncSettingsListener();
     this.mutationObserver?.disconnect();
@@ -424,7 +428,9 @@ export class TimelineEngine {
 
     const previousMarkers = this.state.markers;
 
-    const nextMarkers = snapshot.markers;
+    const nextMarkers = snapshot.markers.map((marker) => marker.attachmentPlaceholder || marker.displaySummary
+      ? { ...marker, summary: displayTurnSummary(marker, getTranslationSync('timelineAttachmentPlaceholder')) }
+      : marker);
     if (nextMarkers.length === 0) {
       if (this.adapter.turns.navigation === 'virtualized') {
         this.state.replaceMarkers([]);

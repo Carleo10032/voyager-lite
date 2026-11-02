@@ -6,6 +6,40 @@ export function turnSummary(element: Element): string {
   return textWithLatexSource(element).replace(/\s+/g, ' ').trim();
 }
 
+/** Keep attachment-only user turns visible without changing assistant summaries. */
+export function userTurnSummary(element: Element): string {
+  if (element.matches('[data-cds="UserMessage"]')) {
+    return element.querySelector('[data-cds="MessageAttachmentsFile"] [title]')?.getAttribute('title')?.trim() || '【附件】';
+  }
+  if (element.matches('[data-chatgpt-search-message-ids]')) {
+    const file = element.querySelector('[class*="resource-card"] [title]');
+    const name = file?.getAttribute('title')?.trim();
+    if (name) return name;
+  }
+  return turnSummary(element) || '【附件】';
+}
+
+/** Preserve the host text as the hash while displaying an attachment's full filename. */
+export function userTurnDisplayOverride(site: string, element: Element): string | undefined {
+  if (site === 'gemini' && element.matches('user-query')) {
+    return element.querySelector('[data-test-id="uploaded-file"] button[aria-label]')?.getAttribute('aria-label')?.trim() || undefined;
+  }
+  if (site !== 'grok') return undefined;
+  const text = element.querySelector('.response-content-markdown')?.textContent?.trim();
+  if (text !== '参考以下内容：') return undefined;
+  const row = element.closest('[id^="response-"]');
+  const attachment = row?.querySelector(':scope > div:first-child button[aria-label]');
+  return attachment?.textContent?.trim() || undefined;
+}
+
+/** Translate only the generated label, never user text or the hash input. */
+export function displayTurnSummary(
+  marker: { summary: string; attachmentPlaceholder?: boolean; displaySummary?: string },
+  attachmentLabel: string,
+): string {
+  return marker.attachmentPlaceholder ? attachmentLabel : marker.displaySummary ?? marker.summary;
+}
+
 /**
  * Content hash shared by every historical turn-id format:
  * legacy `c-<mountIndex>-<hash>`, current `c-<hash>` and `c-<hash>~<n>`.

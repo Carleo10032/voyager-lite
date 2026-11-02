@@ -43,3 +43,15 @@ test('hosts without native identities retain content-based merging',()=>{
  assert.equal(known.length,2);
  assert.deepEqual(known.map(m=>m.id),ids);
 });
+test('an image-only turn remains one marker across repeated refreshes',()=>{
+ const mounted=[turn('image','【附件】',0),turn('question','后续问题',100)];
+ mounted[0].attachmentPlaceholder=true;
+ let known=merge([],mounted);
+ const id=known[0].id,hash=known[0].hash;
+ for(let pass=0;pass<100;pass++) known=merge(known,mounted);
+ assert.equal(known.length,2);
+ assert.equal(known[0].summary,'【附件】');
+ assert.equal(known[0].attachmentPlaceholder,true);
+ assert.equal(known[0].id,id);
+ assert.equal(known[0].hash,hash);
+});

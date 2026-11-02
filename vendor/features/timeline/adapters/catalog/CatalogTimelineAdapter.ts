@@ -9,7 +9,7 @@ import { createCatalogTimelineStoragePolicy } from './CatalogTimelineStorage';
 import { CatalogTurnOwnership } from './CatalogTurnOwnership';
 import type { CatalogTimelineConfig } from './config';
 import type { CatalogSendTimestamps } from './sendTimestamps';
-import { turnSummary } from './turnHash';
+import { turnSummary, userTurnDisplayOverride, userTurnSummary } from './turnHash';
 import { hostTurnId } from './hostTurnId';
 import { type Marker, type MountedTurn, mergeMountedTurns, rememberedMarkers } from './turnMerge';
 import { mountedOwnershipTurns } from './turnOwnership';
@@ -142,11 +142,16 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
     const selector = this.config.turnSelector;
     const mounted: MountedTurn[] = Array.from(container.querySelectorAll<HTMLElement>(selector))
       .filter(renderedCheck())
-      .map((element) => ({
-        element,
-        summary: turnSummary(element),
-        hostTurnId: hostTurnId(this.config.siteId, element),
-      }));
+      .map((element) => {
+        const summary = userTurnSummary(element);
+        return {
+          element,
+          summary,
+          attachmentPlaceholder: summary === '【附件】' && (element.matches('[data-cds="UserMessage"]') || !turnSummary(element)),
+          displaySummary: userTurnDisplayOverride(this.config.siteId, element),
+          hostTurnId: hostTurnId(this.config.siteId, element),
+        };
+      });
     for (const turn of mounted)
       if (!this.originalStamps.has(turn.element))
         this.originalStamps.set(turn.element, turn.element.getAttribute('data-gv-turn-id'));
@@ -188,6 +193,8 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
       id: marker.id,
       element: marker.element,
       summary: marker.summary,
+      attachmentPlaceholder: marker.attachmentPlaceholder,
+      displaySummary: marker.displaySummary,
       assistantSummary:
         assistantByElement.get(marker.element) ?? old.get(marker.id)?.assistantSummary ?? '',
       baseN: this.known.length === 1 ? 0.5 : index / Math.max(1, this.known.length - 1),
