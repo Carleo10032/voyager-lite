@@ -15,6 +15,8 @@ export interface RouteTimelineOptions {
   readonly settleMs?: number;
   /** Forward `hashchange` to the engine, so a same-route `#gv-turn-…` link navigates the rail. */
   readonly followHash?: boolean;
+  /** False when the owning extension instance has been reloaded or removed. */
+  readonly isAlive?: () => boolean;
 }
 
 export interface RouteTimeline {
@@ -62,12 +64,20 @@ export function runRouteTimeline(options: RouteTimelineOptions): RouteTimeline {
   };
   const mount = (previousUrl: string | null): void => {
     if (stopped) return;
+    if (options.isAlive && !options.isAlive()) {
+      stop();
+      return;
+    }
     destroyEngine();
     engine = options.createEngine(previousUrl);
     start(engine);
   };
 
   const stopRouteWatcher = watchRouteChanges(() => {
+    if (options.isAlive && !options.isAlive()) {
+      stop();
+      return;
+    }
     const href = location.href;
     if (href === lastHref) return;
     const previousUrl = lastHref;

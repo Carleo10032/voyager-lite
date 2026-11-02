@@ -72,10 +72,14 @@ export class TimelineView {
       .find((node) => node.dataset.targetTurnId === id);
     const rect = (dot ?? bar).getBoundingClientRect();
     this.navigationIndicator.style.top = `${rect.top + rect.height / 2 - 6}px`;
-    // Use the shared rail edge, not the ruler's oversized hover hit box.
-    const edge = bar.getBoundingClientRect().right;
+    // Center between the visible rail and the browser scrollbar, leaving room
+    // for overlay scrollbars that do not reduce documentElement.clientWidth.
+    const barRect = bar.getBoundingClientRect();
+    const railCenter = (barRect.left + barRect.right) / 2;
     const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-    this.navigationIndicator.style.left = `${Math.max(0, Math.min(edge + 1, viewportWidth - 14))}px`;
+    const scrollbarEdge = Math.min(viewportWidth, window.innerWidth - 12);
+    const center = (railCenter + scrollbarEdge) / 2;
+    this.navigationIndicator.style.left = `${Math.max(0, Math.min(center - 6, scrollbarEdge - 12))}px`;
   }
 
   private firstUserTurnOffset = 0;
@@ -236,6 +240,9 @@ export class TimelineView {
     });
     this.placement.mount(bar);
     this.setupEventListeners();
+    // Settings can arrive before mount; apply them before the first marker render.
+    this.applyContainerVisibility();
+    this.applyTimelineStyle();
     this.resizeObserver = new ResizeObserver(() => this.render());
     this.resizeObserver.observe(bar);
   }

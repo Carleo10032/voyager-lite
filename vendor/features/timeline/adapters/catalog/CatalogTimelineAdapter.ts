@@ -61,6 +61,8 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
     return !signal.aborted && this.refresh();
   }
   observe(callback: MutationCallback): MutationObserver {
+    if (this.config.siteId === 'chatgpt') document.addEventListener('submit', this.onEditSubmit, true);
+    if (this.config.siteId === 'claude') document.addEventListener('click', this.onClaudeEditClick, true);
     const observer = new MutationObserver((records, owner) => {
       if (this.shouldRefresh(records)) callback(records, owner);
     });
@@ -76,6 +78,33 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
     return observer;
   }
   private known: Marker[] = [];
+  private readonly onClaudeEditClick = (event: Event): void => {
+    if (!(event.target instanceof Element)) return;
+    const button = event.target.closest('button');
+    if (!button || button.hasAttribute('disabled')) return;
+    if (button.matches('[data-testid="user-message-previous-version"], [data-testid="user-message-next-version"]')) {
+      const id = hostTurnId('claude', button);
+      const index = this.known.findIndex((marker) => marker.hostTurnId === id);
+      if (id && index >= 0) this.known = this.known.slice(0, index);
+      return;
+    }
+    const editor = button?.closest('[data-testid="message-edit-box"]');
+    if (!editor) return;
+    const buttons = editor.querySelectorAll('button[data-cds="Button"]');
+    if (buttons.length < 2 || buttons[buttons.length - 1] !== button) return;
+    const id = editor.getAttribute('data-message-uuid');
+    const index = this.known.findIndex((marker) => marker.hostTurnId === id);
+    if (id && index >= 0) this.known = this.known.slice(0, index);
+  };
+  private readonly onEditSubmit = (event: Event): void => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.querySelector('[contenteditable="true"]')) return;
+    const id = hostTurnId('chatgpt', form);
+    if (!id) return;
+    const index = this.known.findIndex((marker) => marker.hostTurnId === id);
+    // Editing creates a new conversation branch, invalidating this turn and its descendants.
+    if (index >= 0) this.known = this.known.slice(0, index);
+  };
   private readonly originalStamps = new Map<HTMLElement, string | null>();
 
   constructor(
@@ -217,6 +246,8 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
   }
 
   stop(): void {
+    document.removeEventListener('submit', this.onEditSubmit, true);
+    document.removeEventListener('click', this.onClaudeEditClick, true);
     for (const [element, original] of this.originalStamps) {
       if (original === null) element.removeAttribute('data-gv-turn-id');
       else element.setAttribute('data-gv-turn-id', original);

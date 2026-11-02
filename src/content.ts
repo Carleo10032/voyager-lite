@@ -34,7 +34,9 @@ async function main() {
     const pluginSettings={timelineStyle:settings.timelineStyle,draggable:false,markerLevel:false};
     if (!timeline) {
       controller = new AbortController();
-      timeline = runRouteTimeline({signal:controller.signal, followHash:true, createEngine:()=>{
+      timeline = runRouteTimeline({signal:controller.signal, followHash:true, isAlive:()=>{
+        try { return !!chrome.runtime.id && !!chrome.runtime.getURL(''); } catch { return false; }
+      }, createEngine:()=>{
         const current=readSettings(stored,site.siteId);
         const engine = new TimelineEngine(new CatalogTimelineAdapter(config,ownership),controller!.signal);
         engine.updateSettings({timelineStyle:current.timelineStyle,draggable:false,markerLevel:false});
