@@ -12,7 +12,7 @@ const fixtures = {
   chatgpt: `<div data-turn-key="a"><div data-chatgpt-search-unit-key="fallback-turn-0:0:user" data-chatgpt-search-message-ids="a"><img alt=""><span class="group/resource-card"><span title="课件.pptx">课件.pptx</span></span></div><div data-chatgpt-search-unit-key="fallback-turn-0:1:assistant" data-chatgpt-search-message-ids="a"><img alt="">assistant reply</div></div>`,
   claude: `<div data-cds="UserMessage" data-turn-key="a"><div data-cds="MessageAttachments"><div data-testid="file-thumbnail" data-cds="MessageAttachmentsImage"><img></div><div data-testid="file-thumbnail" data-cds="MessageAttachmentsFile"><span title="课件.pptx">课件.pptx</span></div></div></div>`,
   gemini: `<user-query><div data-test-id="uploaded-img"><img></div><div data-test-id="uploaded-file"><button aria-label="课件.pptx">课件</button></div></user-query>`,
-  grok: `<div id="response-a"><div><button aria-label="打开附件">课件.pptx</button><button aria-label="打开附件"><img>image.png</button></div><div class="message-bubble" data-role="user"><div class="response-content-markdown">参考以下内容：</div></div></div>`,
+  grok: `<div id="response-a"><div><button aria-label="打开附件">课件.pptx</button><button aria-label="打开附件"><img>image.png</button></div><div class="message-bubble" data-testid="user-message"><h2 class="sr-only">你</h2><span data-bubble-text>参考以下内容：</span></div></div>`,
 };
 
 test('mixed image and file attachments produce one stable marker on each platform', {timeout:30000}, async () => {
@@ -32,7 +32,7 @@ test('mixed image and file attachments produce one stable marker on each platfor
         for (let i = 0; i < 30; i++) markers = mergeMountedTurns(rememberedMarkers(markers, turns), turns, () => 100);
         return { matched: elements.length, count: markers.length, name: displayTurnSummary(markers[0], '【附件】') };
       }, site);
-      assert.deepEqual(result, { matched: 1, count: 1, name: '课件.pptx' }, site);
+      assert.deepEqual(result, { matched: 1, count: 1, name: site === 'grok' ? '参考以下内容：' : '课件.pptx' }, site);
     }
   } finally { await browser.close(); }
 });

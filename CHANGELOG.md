@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.15 — 2026-11-12
+
+- Restore the timeline on the redesigned Grok web UI using its current message markers.
+- Read Grok prompt text without the hidden author heading or message controls.
+- Remove legacy Grok message selectors and attachment filename overrides; show the page’s own attachment text.
+
 ## 2.2.3 — 2026-11-01
 
 - Place navigation loading feedback to the right of the shared rail, away from left-side previews, and clamp it inside the viewport.

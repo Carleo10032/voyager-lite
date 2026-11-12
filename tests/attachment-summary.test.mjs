@@ -22,18 +22,6 @@ test('attachment-only turns show a file name or a fallback without changing text
   assert.equal(userTurnSummary(new Element('  正文  内容  ')), '正文 内容');
 });
 
-test('Grok displays attachment names without changing the original message summary', () => {
-  const element = new Element('你参考以下内容：');
-  element.querySelector = selector => selector === '.response-content-markdown' ? { textContent: '参考以下内容：' } : null;
-  element.closest = () => ({ querySelector: () => ({ textContent: '记录.xlsx' }) });
-  const summary = userTurnSummary(element);
-  const displaySummary = userTurnDisplayOverride('grok', element);
-  assert.equal(displaySummary, '记录.xlsx');
-  assert.equal(displayTurnSummary({ summary, displaySummary }, '[Attachment]'), '记录.xlsx');
-  assert.equal(summary, '你参考以下内容：');
-  assert.equal(userTurnDisplayOverride('gemini', element), undefined);
-});
-
 test('Gemini displays the full filename while preserving the original summary', () => {
   const element = new Element('记录');
   element.matches = selector => selector === 'user-query';

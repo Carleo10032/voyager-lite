@@ -3,7 +3,11 @@ import { textWithLatexSource } from '@/core/utils/userLatexSource';
 /** The mounted turn's normalized DOM text is its shared summary and hash input. */
 export function turnSummary(element: Element): string {
   // Rendered user LaTeX reads as its source, so rendering never changes a turn's id or star.
-  return textWithLatexSource(element).replace(/\s+/g, ' ').trim();
+  // Grok's redesigned bubble also contains a hidden author heading and action toolbar.
+  const content = element.matches('[data-testid="user-message"]')
+    ? element.querySelector('[data-bubble-text]') ?? element
+    : element;
+  return textWithLatexSource(content).replace(/\s+/g, ' ').trim();
 }
 
 /** Keep attachment-only user turns visible without changing assistant summaries. */
@@ -24,12 +28,7 @@ export function userTurnDisplayOverride(site: string, element: Element): string 
   if (site === 'gemini' && element.matches('user-query')) {
     return element.querySelector('[data-test-id="uploaded-file"] button[aria-label]')?.getAttribute('aria-label')?.trim() || undefined;
   }
-  if (site !== 'grok') return undefined;
-  const text = element.querySelector('.response-content-markdown')?.textContent?.trim();
-  if (text !== '参考以下内容：') return undefined;
-  const row = element.closest('[id^="response-"]');
-  const attachment = row?.querySelector(':scope > div:first-child button[aria-label]');
-  return attachment?.textContent?.trim() || undefined;
+  return undefined;
 }
 
 /** Translate only the generated label, never user text or the hash input. */
