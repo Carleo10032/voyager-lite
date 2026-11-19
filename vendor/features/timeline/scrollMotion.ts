@@ -69,7 +69,7 @@ function applyScroll(target: ScrollTarget, top: number, behavior: ScrollBehavior
   const range = scrollRange(container);
   const clamped = isReverseScroller(container)
     ? Math.min(0, Math.max(-range, top - range))
-    : Math.max(0, top);
+    : Math.min(range, Math.max(0, top));
   if (container.scrollTo) container.scrollTo({ top: clamped, behavior });
   else container.scrollTop = clamped;
 }

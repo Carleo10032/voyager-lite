@@ -14,10 +14,56 @@ const ACTIVE_ANCHOR = 0.5;
 const NAVIGATION_ACTIVE_LOCK_MS = 900;
 const PENDING_NAVIGATION_TIMEOUT_MS = 8000;
 const PENDING_NAVIGATION_HOP_MS = 80;
+const VEIL_HOP_MS = 60;
+const VEIL_QUIET_MS = 350;
+const VEIL_MAX_MS = 2200;
+const CURTAIN_DISTANCE_VIEWPORTS = 1.5;
 const SETTLED_READS = 3;
+const PROBE_SETTLE_MS = 320;
 const LOADING_DELAY_MS = 200;
+const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
+const LAYOUT_STYLE_RE = /(?:height|transform|top|display|padding|margin)/i;
+const OWN_UI_SELECTOR =
+  '.gv-navigation-veil, .gv-navigation-loading, [data-gv-turn-navigator], [data-gv-thread-anchor-layer]';
 
 type NavigationMarker = TimelineNavigationMarker;
+
+export interface LiveTargetResolution {
+  readonly element: HTMLElement;
+  readonly mounted: boolean;
+}
+
+export interface VirtualizedNavigationConfig {
+  readonly resolveLiveTarget?: (hostTurnId: string) => LiveTargetResolution | null;
+  readonly onCurtainChange?: (active: boolean) => void;
+}
+
+function isMirrorAnchor(element: HTMLElement): boolean {
+  return typeof element.getAttribute === 'function' && element.getAttribute('data-gv-thread-anchor') !== null;
+}
+
+function isLayoutMutation(record: MutationRecord): boolean {
+  const target =
+    record.target && (record.target as Element).nodeType === 1
+      ? (record.target as Element)
+      : (record.target?.parentElement ?? null);
+  if (typeof target?.closest === 'function' && target.closest(OWN_UI_SELECTOR)) return false;
+  if (record.type === 'childList') {
+    for (const node of Array.from(record.addedNodes ?? [])) {
+      if (node.nodeType === 1 && !(typeof (node as Element).closest === 'function' && (node as Element).closest(OWN_UI_SELECTOR)))
+        return true;
+    }
+    for (const node of Array.from(record.removedNodes ?? [])) {
+      if (node.nodeType === 1 && !(typeof (node as Element).closest === 'function' && (node as Element).closest(OWN_UI_SELECTOR)))
+        return true;
+    }
+    return false;
+  }
+  if (record.type === 'attributes' && record.attributeName === 'style' && target) {
+    return LAYOUT_STYLE_RE.test(target.getAttribute?.('style') ?? '');
+  }
+  return false;
+}
 
 /** Owns scroll geometry, active selection and timed homing for the current marker list. */
 export class VirtualizedTimelineNavigation {
@@ -28,7 +74,7 @@ export class VirtualizedTimelineNavigation {
   private on(
     target: EventTarget,
     name: string,
-    listener: () => void,
+    listener: (event: Event) => void,
     options: AddEventListenerOptions = {},
   ): Dispose {
     target.addEventListener(name, listener, { ...options, signal: this.lifetime.signal });
@@ -67,10 +113,20 @@ export class VirtualizedTimelineNavigation {
   private pendingNavigationLo = 0;
   private pendingNavigationHi = 0;
   private pendingNavigationProbed = false;
+  private pendingScrollHeight = 0;
+  private pendingProbeAt = 0;
+  private pendingProbeSignature: string | null = null;
+  private pendingProbeStableReads = 0;
   private pendingOffset: number | null = null;
   private pendingDestination: number | null = null;
   private pendingStableReads = 0;
   private pendingStartedAt = 0;
+  private pendingLastActivityAt = 0;
+  private pendingLastHeight = 0;
+  private pendingActivityObserver: MutationObserver | null = null;
+  private stopThreadMessageListener: Dispose | null = null;
+  private curtainActive = false;
+  private curtainUntil = 0;
   private lastHandledHash: string | null = null;
   private scrollTarget: HTMLElement | Window | null = null;
   private stopScrollListener: Dispose | null = null;
@@ -80,6 +136,7 @@ export class VirtualizedTimelineNavigation {
     private readonly getMarkers: () => readonly NavigationMarker[],
     private readonly onActiveChange: (turnId: string | null, previousTurnId: string | null) => void,
     private readonly onPendingChange: (turnId: string | null) => void = () => {},
+    private readonly config: VirtualizedNavigationConfig = {},
   ) {}
 
   private get markers(): readonly NavigationMarker[] {
@@ -168,25 +225,124 @@ export class VirtualizedTimelineNavigation {
     );
   }
 
+  private resolveNavigationTarget(marker: NavigationMarker): LiveTargetResolution | null {
+    if (marker.hostTurnId && this.config.resolveLiveTarget) {
+      const live = this.config.resolveLiveTarget(marker.hostTurnId);
+      if (live && isRenderedTarget(live.element)) return live;
+    }
+    if (isRenderedTarget(marker.element)) {
+      return { element: marker.element, mounted: !isMirrorAnchor(marker.element) };
+    }
+    return null;
+  }
+
+  private readonly onThreadMessage = (event: Event): void => {
+    if (this.disposed || !this.pendingNavigationId) return;
+    const message = event as MessageEvent;
+    if (message.source !== window) return;
+    if (typeof location !== 'undefined' && message.origin !== location.origin) return;
+    if (message.data?.__gvType !== 'gv-thread-updated') return;
+    this.pendingLastActivityAt = Date.now();
+  };
+
+  private setCurtain(active: boolean): void {
+    if (!this.config.onCurtainChange) return;
+    if (active && !this.disposed) {
+      this.curtainActive = true;
+      this.curtainUntil = Date.now() + VEIL_MAX_MS;
+      this.config.onCurtainChange(true);
+      this.startVeilActivityWatch();
+      return;
+    }
+    this.pendingActivityObserver?.disconnect();
+    this.pendingActivityObserver = null;
+    void this.stopThreadMessageListener?.();
+    this.stopThreadMessageListener = null;
+    if (!this.curtainActive) return;
+    this.curtainActive = false;
+    this.curtainUntil = 0;
+    this.config.onCurtainChange(false);
+  }
+
+  /** Track host DOM/layout activity inside the scroller so the veil waits until loading finishes. */
+  private startVeilActivityWatch(): void {
+    this.pendingActivityObserver?.disconnect();
+    this.pendingActivityObserver = null;
+    void this.stopThreadMessageListener?.();
+    this.stopThreadMessageListener = null;
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      this.stopThreadMessageListener = this.on(window, 'message', this.onThreadMessage);
+    }
+    if (typeof MutationObserver !== 'function') return;
+    const root =
+      this.scrollTarget && this.scrollTarget !== window
+        ? (this.scrollTarget as HTMLElement)
+        : document.body;
+    if (!root) return;
+    try {
+      const observer = new MutationObserver((records) => {
+        if (records.some(isLayoutMutation)) this.pendingLastActivityAt = Date.now();
+      });
+      observer.observe(root, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['style'],
+      });
+      this.pendingActivityObserver = observer;
+    } catch {
+      this.pendingActivityObserver = null;
+    }
+  }
+
+  private hasLoadingVisibleImages(): boolean {
+    const root =
+      this.scrollTarget && this.scrollTarget !== window
+        ? (this.scrollTarget as HTMLElement)
+        : document.body;
+    if (!root || typeof root.querySelectorAll !== 'function') return false;
+    const top = this.getViewportTop();
+    const bottom = top + this.getViewportHeight();
+    for (const img of Array.from(root.querySelectorAll<HTMLImageElement>('img'))) {
+      if (img.complete) continue;
+      const rect = img.getBoundingClientRect();
+      if (rect.bottom >= top && rect.top <= bottom) return true;
+    }
+    return false;
+  }
+
   navigateTo(turnId: string): void {
+    if (this.disposed) return;
     const marker = this.findMarker(turnId);
     if (!marker) return;
     this.navigationActiveLockUntil = Date.now() + NAVIGATION_ACTIVE_LOCK_MS;
     this.setActiveTurn(marker.id);
-    if (isRenderedTarget(marker.element)) {
+    const resolved = this.resolveNavigationTarget(marker);
+    const viewportHeight = this.getViewportHeight();
+    const shouldCover =
+      !!this.config.onCurtainChange &&
+      (!resolved ||
+        !resolved.mounted ||
+        Math.abs(
+          this.centerOf(resolved.element) - (this.getScrollTop() + viewportHeight * ACTIVE_ANCHOR),
+        ) >
+          viewportHeight * CURTAIN_DISTANCE_VIEWPORTS);
+    if (resolved) {
       this.beginPendingNavigation(marker);
+      if (shouldCover) this.setCurtain(true);
       this.pendingNavigationProbed = true;
       scrollElementToAnchor(
-        this.getScrollTarget(marker.element), marker.element,
-        this.getScrollTop(), this.getViewportHeight(), 'instant',
+        this.getScrollTarget(resolved.element), resolved.element,
+        this.getScrollTop(), viewportHeight, 'instant',
       );
-      this.schedulePendingNavigationHop();
+      this.schedulePendingNavigationHop(shouldCover ? VEIL_HOP_MS : PENDING_NAVIGATION_HOP_MS);
       return;
     }
-    // Virtualized out: the remembered offset is only an estimate (Claude
+    // Virtualized out: the remembered offset is only an estimate (host
     // re-measures content as it mounts), so home in iteratively instead of
     // trusting a single jump.
     this.beginPendingNavigation(marker);
+    if (shouldCover) this.setCurtain(true);
     this.homePendingNavigation();
   }
 
@@ -196,25 +352,37 @@ export class VirtualizedTimelineNavigation {
     this.pendingOffset = null;
     this.pendingDestination = null;
     this.pendingStableReads = 0;
-    this.pendingStartedAt = Date.now();
-    this.pendingNavigationUntil = Date.now() + PENDING_NAVIGATION_TIMEOUT_MS;
+    const now = Date.now();
+    this.pendingStartedAt = now;
+    this.pendingLastActivityAt = now;
+    this.pendingLastHeight = this.getScrollHeight();
+    this.pendingNavigationUntil = now + PENDING_NAVIGATION_TIMEOUT_MS;
     this.pendingNavigationLo = 0;
     this.pendingNavigationHi = Math.max(
       this.getScrollHeight(),
       (marker.center ?? 0) + this.getViewportHeight(),
     );
     this.pendingNavigationProbed = false;
+    this.pendingScrollHeight = this.getScrollHeight();
+    this.pendingProbeSignature = null;
+    this.pendingProbeStableReads = 0;
+    this.pendingProbeAt = now;
     if (this.disposed) return;
+    const onKeyDown = (event: Event): void => {
+      if (SCROLL_KEYS.has((event as KeyboardEvent).key)) this.cancelPendingNavigationOnUserScroll();
+    };
     this.stopUserScrollListeners = [
       this.on(window, 'wheel', this.cancelPendingNavigationOnUserScroll, { passive: true }),
       this.on(window, 'touchmove', this.cancelPendingNavigationOnUserScroll, {
         passive: true,
       }),
+      this.on(window, 'keydown', onKeyDown, { passive: true }),
     ];
   }
 
   private clearPendingNavigation(): void {
     this.pendingNavigationId = null;
+    this.setCurtain(false);
     this.onPendingChange(null);
     void this.stopPendingNavigationTimer?.();
     this.stopPendingNavigationTimer = null;
@@ -257,11 +425,48 @@ export class VirtualizedTimelineNavigation {
       this.finishPendingNavigation(false);
       return;
     }
-    this.navigationActiveLockUntil = Date.now() + NAVIGATION_ACTIVE_LOCK_MS;
-    if (isRenderedTarget(marker.element)) {
-      const target = this.getScrollTarget(marker.element);
+    const now = Date.now();
+    this.navigationActiveLockUntil = now + NAVIGATION_ACTIVE_LOCK_MS;
+    const resolved = this.resolveNavigationTarget(marker);
+    if (resolved && this.curtainActive) {
+      const target = this.getScrollTarget(resolved.element);
+      const offset = this.getScrollTop();
+      const scrollHeight = this.getScrollHeight();
+      const destination = Math.min(
+        Math.max(0, scrollHeight - this.getViewportHeight()),
+        elementCenterDestination(target, resolved.element),
+      );
+      const diff = destination - offset;
+      const layoutMoved =
+        this.pendingDestination === null ||
+        Math.abs(destination - this.pendingDestination) > 2 ||
+        Math.abs(scrollHeight - this.pendingLastHeight) > 2;
+      if (layoutMoved || Math.abs(diff) > 2) this.pendingLastActivityAt = now;
+      this.pendingOffset = offset;
+      this.pendingDestination = destination;
+      this.pendingLastHeight = scrollHeight;
+      if (Math.abs(diff) > 2) {
+        scrollElementToAnchor(target, resolved.element, offset, this.getViewportHeight(), 'instant');
+      }
+      const settled =
+        resolved.mounted &&
+        Math.abs(diff) <= 2 &&
+        now - this.pendingLastActivityAt >= VEIL_QUIET_MS &&
+        !this.hasLoadingVisibleImages();
+      if (settled || now >= this.curtainUntil) {
+        this.clearPendingNavigation();
+        return;
+      }
+      this.schedulePendingNavigationHop(VEIL_HOP_MS);
+      return;
+    }
+    if (this.curtainActive && now >= this.curtainUntil) {
+      this.setCurtain(false);
+    }
+    if (resolved) {
+      const target = this.getScrollTarget(resolved.element);
       // Once readable, stop chasing exact centering as the host reflows.
-      const rect = marker.element.getBoundingClientRect();
+      const rect = resolved.element.getBoundingClientRect();
       const viewportTop = this.getViewportTop();
       const viewportBottom = viewportTop + this.getViewportHeight();
       const readable = rect.height <= this.getViewportHeight()
@@ -274,9 +479,9 @@ export class VirtualizedTimelineNavigation {
       const offset = this.getScrollTop();
       const destination = Math.min(
         Math.max(0, this.getScrollHeight() - this.getViewportHeight()),
-        elementCenterDestination(target, marker.element),
+        elementCenterDestination(target, resolved.element),
       );
-      if (Math.abs(destination - offset) > 3 && Date.now() - this.pendingStartedAt >= LOADING_DELAY_MS)
+      if (Math.abs(destination - offset) > 3 && now - this.pendingStartedAt >= LOADING_DELAY_MS)
         this.onPendingChange(marker.id);
       // Wait for both the scroll and the target's document position to settle.
       // A mounted bubble can move when preceding replies finish rendering.
@@ -294,16 +499,49 @@ export class VirtualizedTimelineNavigation {
         return;
       }
       this.pendingStableReads = 0;
-      scrollElementToAnchor(target, marker.element, offset, this.getViewportHeight(), 'instant');
+      scrollElementToAnchor(target, resolved.element, offset, this.getViewportHeight(), 'instant');
       this.schedulePendingNavigationHop();
       return;
     }
-    if (Date.now() - this.pendingStartedAt >= LOADING_DELAY_MS)
+    if (!this.curtainActive && now - this.pendingStartedAt >= LOADING_DELAY_MS)
       this.onPendingChange(marker.id);
+    // A scroll starts an asynchronous host render. Until that render settles,
+    // the old mounted window says nothing about which side of the target we
+    // landed on. Repeated 80ms jumps can prevent it from mounting at all.
+    if (this.pendingNavigationProbed) {
+      const signature = JSON.stringify([
+        this.getScrollTop(), this.getScrollHeight(),
+        this.markers.filter((item) => isRenderedTarget(item.element)).map((item) =>
+          [item.id, this.centerOf(item.element)]),
+      ]);
+      this.pendingProbeStableReads = signature === this.pendingProbeSignature
+        ? this.pendingProbeStableReads + 1 : 0;
+      this.pendingProbeSignature = signature;
+      if (now - this.pendingProbeAt < PROBE_SETTLE_MS ||
+          this.pendingProbeStableReads < SETTLED_READS) {
+        this.schedulePendingNavigationHop();
+        return;
+      }
+    }
     // Reacquire an unmounted target by marker identity, not its stale DOM box.
     this.pendingOffset = null;
     this.pendingDestination = null;
     this.pendingStableReads = 0;
+    // Virtualizers replace estimated reply heights when a window mounts.
+    // Bounds measured in the previous layout no longer bracket the target.
+    const scrollHeight = this.getScrollHeight();
+    const layoutChanged = Math.abs(scrollHeight - this.pendingScrollHeight) > 1;
+    if (layoutChanged) {
+      this.pendingNavigationLo = 0;
+      this.pendingNavigationHi = scrollHeight;
+      this.pendingScrollHeight = scrollHeight;
+    }
+    // After a probe, an unchanged mounted window also rules out the viewport
+    // we just searched. Bubble positions alone repeat a midpoint forever
+    // inside a reply that is much taller than the viewport. The initial
+    // viewport and a reflowed viewport are not search results in this frame.
+    const canBoundViewport = this.pendingNavigationProbed && !layoutChanged;
+    const reference = this.getScrollTop() + this.getViewportHeight() * ACTIVE_ANCHOR;
     const mountedIndexes = this.markers.reduce<number[]>((acc, item, index) => {
       if (isRenderedTarget(item.element)) acc.push(index);
       return acc;
@@ -315,11 +553,16 @@ export class VirtualizedTimelineNavigation {
       const firstMounted = mountedIndexes[0];
       const lastMounted = mountedIndexes[mountedIndexes.length - 1];
       if (targetIndex < firstMounted) {
-        this.pendingNavigationHi = Math.min(this.pendingNavigationHi, this.centerOf(this.markers[firstMounted].element));
+        this.pendingNavigationHi = Math.min(
+          this.pendingNavigationHi,
+          this.centerOf(this.markers[firstMounted].element),
+          canBoundViewport ? reference : Infinity,
+        );
       } else if (targetIndex > lastMounted) {
         this.pendingNavigationLo = Math.max(
           this.pendingNavigationLo,
           this.centerOf(this.markers[lastMounted].element),
+          canBoundViewport ? reference : 0,
         );
       } else {
         // Inside a virtualization gap: bracket the target between its nearest
@@ -360,15 +603,18 @@ export class VirtualizedTimelineNavigation {
       ? (marker.center ?? 0)
       : (this.pendingNavigationLo + this.pendingNavigationHi) / 2;
     this.pendingNavigationProbed = true;
+    this.pendingProbeAt = now;
+    this.pendingProbeSignature = null;
+    this.pendingProbeStableReads = 0;
     scrollToEstimatedCenter(this.scrollTarget, probe, this.getViewportHeight(), 'instant');
     this.schedulePendingNavigationHop();
   };
 
-  private schedulePendingNavigationHop(): void {
+  private schedulePendingNavigationHop(delay = PENDING_NAVIGATION_HOP_MS): void {
     if (this.stopPendingNavigationTimer !== null || this.disposed) return;
     this.stopPendingNavigationTimer = this.timer(
       this.homePendingNavigation,
-      PENDING_NAVIGATION_HOP_MS,
+      delay,
     );
   }
 

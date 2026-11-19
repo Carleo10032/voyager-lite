@@ -673,22 +673,53 @@ html[data-gv-scheme='dark'] .timeline-left-slider::before {
   box-shadow: none !important;
 }
 
-/* Lite: recolor only circular nodes, keeping tick styles and the rail unchanged. */
-.gemini-timeline-bar:not(.timeline-style-compact):not(.gv-timeline-style-ruler) .timeline-dot::after {
+/* Lite: Antigravity-style dots sharing ruler's centered layout & hover logic. */
+.gemini-timeline-bar::before {
+  display: none !important;
+}
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-track {
+  overflow: visible;
+}
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-track-content {
+  height: 100% !important;
+}
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot {
+  top: calc(50% + var(--timeline-compact-offset, 0px));
+  width: 28px;
+  height: var(--lite-ruler-gap, 18px);
+}
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot::before,
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-runner-ring {
+  display: none;
+}
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot::after {
+  width: clamp(4px, calc(var(--lite-ruler-gap, 18px) - 4px), 10px);
+  height: clamp(4px, calc(var(--lite-ruler-gap, 18px) - 4px), 10px);
   box-sizing: border-box;
   border: none;
+  box-shadow: none;
+  transform: translate(-50%, -50%);
+  transition: background-color 120ms ease;
 }
-.gemini-timeline-bar:not(.timeline-style-compact):not(.gv-timeline-style-ruler) .timeline-dot:not(.starred)::after {
-  background-color: var(--lite-brand-soft);
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot:not(.starred)::after {
+  background-color: rgba(0, 0, 0, 0.16);
 }
-
-/* Lite: outlined idle nodes; solid brand-colored active node. */
-.gemini-timeline-bar:not(.timeline-style-compact):not(.gv-timeline-style-ruler) .timeline-dot::after {
-  box-shadow: 0 0 0 var(--timeline-active-ring) var(--timeline-dot-active-color);
+html[data-gv-scheme='dark'] .gemini-timeline-bar.gv-timeline-style-dots .timeline-dot:not(.starred)::after {
+  background-color: rgba(255, 255, 255, 0.22);
 }
-.gemini-timeline-bar:not(.timeline-style-compact):not(.gv-timeline-style-ruler) .timeline-dot.active::after {
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot:hover::after,
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot:focus-visible::after,
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot.active::after {
   background-color: var(--timeline-dot-active-color);
-  box-shadow: 0 0 0 var(--timeline-active-ring) var(--timeline-dot-active-color);
+  box-shadow: none;
+  transform: translate(-50%, -50%);
+}
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot.starred::after {
+  background-color: var(--timeline-star-color);
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gemini-timeline-bar.gv-timeline-style-dots .timeline-dot::after { transition: none; }
 }
 
 /* Host/browser rectangular focus outlines get clipped into horizontal bars by the rail. */
@@ -720,7 +751,41 @@ html[data-gv-scheme='dark'] .timeline-left-slider::before {
   pointer-events: none;
   animation: gv-navigation-spin 0.8s linear infinite;
 }
+/* Opaque transition veil covering only the chat scroller during distant/unmounted jumps. */
+.gv-navigation-veil {
+  position: fixed;
+  z-index: 2147483640;
+  pointer-events: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gv-veil-bg, #ffffff);
+  opacity: 1;
+  transition: opacity 150ms ease-out;
+}
+html[data-gv-scheme='dark'] .gv-navigation-veil {
+  background: var(--gv-veil-bg, #212121);
+}
+.gv-navigation-veil.gv-navigation-veil-hiding {
+  opacity: 0;
+}
+.gv-navigation-veil-spinner {
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--timeline-dot-active-color, #4165e8) 24%, transparent);
+  border-top-color: var(--timeline-dot-active-color, #4165e8);
+  opacity: 0;
+  animation:
+    gv-navigation-spin 0.7s linear infinite,
+    gv-veil-spinner-in 120ms ease 220ms forwards;
+}
+@keyframes gv-veil-spinner-in { to { opacity: 1; } }
 @keyframes gv-navigation-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .gv-navigation-loading { animation: none; }
+  .gv-navigation-loading,
+  .gv-navigation-veil-spinner { animation: none; }
+  .gv-navigation-veil { transition: none; }
 }

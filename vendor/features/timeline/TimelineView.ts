@@ -21,6 +21,7 @@ const TIMELINE_PAGE_NODES = [
   '.gv-timeline-preview-hover-bridge',
   '#gemini-timeline-tooltip',
   '.gv-navigation-loading',
+  '.gv-navigation-veil',
 ].join(',');
 interface TimelineViewOptions {
   mountAnchor?: HTMLElement;
@@ -48,7 +49,75 @@ export class TimelineView {
   hideContainer: boolean = false;
 
   private navigationIndicator: HTMLElement | null = null;
+  private navigationVeil: HTMLElement | null = null;
+  private veilRemoveTimer: number | null = null;
   private pendingTurnId: string | null = null;
+
+  setNavigationCurtain(active: boolean): void {
+    if (this.veilRemoveTimer !== null) {
+      window.clearTimeout(this.veilRemoveTimer);
+      this.veilRemoveTimer = null;
+    }
+    if (!active || this.destroyed) {
+      const veil = this.navigationVeil;
+      if (!veil) return;
+      if (this.destroyed) {
+        veil.remove();
+        this.navigationVeil = null;
+        return;
+      }
+      veil.classList.add('gv-navigation-veil-hiding');
+      this.veilRemoveTimer = window.setTimeout(() => {
+        this.veilRemoveTimer = null;
+        if (this.navigationVeil === veil) {
+          veil.remove();
+          this.navigationVeil = null;
+        }
+      }, 150);
+      return;
+    }
+    const viewport = this.options.getViewport();
+    const isWindowViewport =
+      !viewport || viewport === document.documentElement || viewport === document.body;
+    const rect = isWindowViewport
+      ? { top: 0, left: 0, width: window.innerWidth, height: window.innerHeight }
+      : viewport.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    let veil = this.navigationVeil;
+    if (!veil || !veil.isConnected) {
+      veil = document.createElement('div');
+      veil.className = 'gv-navigation-veil';
+      veil.setAttribute('aria-hidden', 'true');
+      const spinner = document.createElement('span');
+      spinner.className = 'gv-navigation-veil-spinner';
+      veil.appendChild(spinner);
+      (this.options.mountAnchor ?? document.body).append(veil);
+      this.navigationVeil = veil;
+    }
+    veil.classList.remove('gv-navigation-veil-hiding');
+    veil.style.top = `${Math.max(0, Math.round(rect.top))}px`;
+    veil.style.left = `${Math.max(0, Math.round(rect.left))}px`;
+    veil.style.width = `${Math.round(rect.width)}px`;
+    veil.style.height = `${Math.round(rect.height)}px`;
+    const bg = this.resolveOpaqueBackground(viewport);
+    if (bg) veil.style.setProperty('--gv-veil-bg', bg);
+    else veil.style.removeProperty('--gv-veil-bg');
+  }
+
+  private resolveOpaqueBackground(start: HTMLElement | null): string | null {
+    for (let node: HTMLElement | null = start; node; node = node.parentElement) {
+      try {
+        const bg = getComputedStyle(node).backgroundColor;
+        if (!bg || bg === 'transparent') continue;
+        const rgba = bg.match(/^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([0-9.]+)\s*\)$/);
+        if (rgba && parseFloat(rgba[1]) < 0.99) continue;
+        return bg;
+      } catch {
+        break;
+      }
+    }
+    return null;
+  }
 
   setNavigationPending(id: string | null): void {
     this.pendingTurnId = id;
@@ -291,8 +360,9 @@ export class TimelineView {
     }
   }
   destroy(): void {
-    this.setNavigationPending(null);
     this.destroyed = true;
+    this.setNavigationPending(null);
+    this.setNavigationCurtain(false);
 
     this.lifetime.abort();
     this.resizeObserver?.disconnect();
@@ -323,39 +393,26 @@ export class TimelineView {
     if (!bar) return;
     const compact = this.timelineStyle === 'compact';
     const ruler = this.timelineStyle === 'ruler';
-    const dense = compact || ruler;
+    const dots = this.timelineStyle === 'dots';
     bar.classList.toggle('timeline-style-compact', compact);
     bar.classList.toggle('gv-timeline-style-ruler', ruler);
+    bar.classList.toggle('gv-timeline-style-dots', dots);
     this.updateRulerDirection();
-    this.ui.slider?.classList.toggle('timeline-style-compact', dense);
+    this.ui.slider?.classList.toggle('timeline-style-compact', true);
     this.options.onStyleChange();
-    if (dense) {
-      if (this.ui.track) this.ui.track.scrollTop = 0;
-    }
+    if (this.ui.track) this.ui.track.scrollTop = 0;
     if (compact) {
       this.ui.track?.setAttribute('aria-hidden', 'true');
     } else {
       this.ui.track?.removeAttribute('aria-hidden');
-      if (!ruler) this.syncTimelineTrackToMain();
     }
     this.previewPanel?.setCompactMode(compact);
-    this.previewPanel?.setFloatingToggleSuppressed(ruler);
+    this.previewPanel?.setFloatingToggleSuppressed(!compact);
     this.updateVirtualRangeAndRender();
     this.updateSlider();
   }
 
-  syncTimelineTrackToMain(): void {
-    if (this.timelineStyle !== 'dots') return;
-    if (this.slider?.dragging) return;
-    if (!this.ui.track || !this.scrollContainer || !this.dotLayer.contentHeight) return;
-    const scrollTop = this.scrollContainer.scrollTop;
-    const ref = scrollTop + this.scrollContainer.clientHeight * 0.45;
-    const span = Math.max(1, this.contentSpanPx || 1);
-    const r = Math.max(0, Math.min(1, (ref - (this.firstUserTurnOffset || 0)) / span));
-    const maxScroll = Math.max(0, this.dotLayer.contentHeight - (this.ui.track.clientHeight || 0));
-    const target = Math.round(r * maxScroll);
-    if (Math.abs((this.ui.track.scrollTop || 0) - target) > 1) this.ui.track.scrollTop = target;
-  }
+  syncTimelineTrackToMain(): void {}
 
   /** Reset inline placement when the page direction changes. */
   applyRTLUpdate(language?: string | null): void {

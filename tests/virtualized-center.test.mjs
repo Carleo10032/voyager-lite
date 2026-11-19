@@ -10,12 +10,12 @@ function fixture(){
  let top=5000,height=40;
  const element={isConnected:true,getBoundingClientRect:()=>({top:top-viewport.scrollTop,bottom:top-viewport.scrollTop+height,height,width:400,left:100,right:500})};
  const marker={id:'target',element};
- const scope={module:{exports:{}},window:win,document:{documentElement:{},body:{},querySelectorAll:()=>[]},AbortController,Date:class extends Date {static now(){return now;}},getComputedStyle:()=>({display:'block',flexDirection:'column',scrollPaddingTop:'64px'})};
+ const scope={module:{exports:{}},window:win,document:{documentElement:{},body:{},querySelectorAll:()=>[],addEventListener(){},removeEventListener(){}},AbortController,Date:class extends Date {static now(){return now;}},getComputedStyle:()=>({display:'block',flexDirection:'column',scrollPaddingTop:'64px'})};
  vm.runInNewContext(bundle.outputFiles[0].text,scope);
  const markers=[marker], pending=[], active=[];
  const nav=new scope.module.exports.VirtualizedTimelineNavigation(()=>viewport,()=>markers,id=>active.push(id),id=>pending.push(id));
  nav.prepare(viewport);nav.measure();element.isConnected=false;
- return {nav,element,viewport,calls,timers,markers,pending,active,setTop:n=>top=n,setHeight:n=>height=n,wheel(){listeners.get('wheel')?.();}, tick(){now+=80;const next=timers.values().next().value;next?.();}};
+ return {document:scope.document,nav,element,viewport,calls,timers,markers,pending,active,setTop:n=>top=n,setHeight:n=>height=n,wheel(){listeners.get('wheel')?.();}, tick(){now+=80;const next=timers.values().next().value;next?.();}};
 }
 test('unmounted target initially lands at cached centre; exact remount does not scroll again',()=>{
  const f=fixture();f.nav.navigateTo('target');
@@ -146,4 +146,57 @@ test('a readable off-center target stops without another jump',()=>{
 test('first message at the top needs no centering correction',()=>{
  const f=fixture();f.element.isConnected=true;f.setTop(0);f.nav.navigateTo('target');
  f.tick();assert.equal(f.viewport.scrollTop,0);assert.equal(f.calls.length,1);assert.equal(f.timers.size,0);f.nav.destroy();
+});
+
+test('discovery advances through a long reply instead of repeating the same midpoint',()=>{
+ for(const backwards of [false,true]){
+  const f=fixture();
+  const neighbor={id:'neighbor',element:{isConnected:true,getBoundingClientRect:()=>({top:(backwards?9000:100)-f.viewport.scrollTop,height:40,width:400})}};
+  if(backwards)f.markers.push(neighbor);else f.markers.unshift(neighbor);
+  f.nav.navigateTo('target');
+  const probes=[];
+  for(let i=0;i<3;i++){for(let j=0;j<4;j++)f.tick();probes.push(f.viewport.scrollTop);}
+  for(let i=1;i<probes.length;i++){
+   assert.ok(backwards?probes[i]<probes[i-1]:probes[i]>probes[i-1], 'each probe must leave the previously searched window');
+  }
+  f.element.isConnected=true;f.setTop(f.viewport.scrollTop+200);f.tick();
+  assert.equal(f.timers.size,0);f.nav.destroy();
+ }
+});
+
+test('remeasured reply heights discard bounds from the previous layout',()=>{
+ const f=fixture();let neighborTop=4000;
+ f.markers.push({id:'after',element:{isConnected:true,getBoundingClientRect:()=>({top:neighborTop-f.viewport.scrollTop,height:40,width:400})}});
+ f.nav.navigateTo('target');
+ assert.ok(f.viewport.scrollTop<4000);
+ // Mounting a reply expands the document and moves the target beyond the old upper bound.
+ f.viewport.scrollHeight=20000;neighborTop=15000;
+ for(let i=0;i<4;i++)f.tick();
+ assert.ok(f.viewport.scrollTop>4000,'must search beyond the obsolete bound');
+ f.element.isConnected=true;f.setTop(f.viewport.scrollTop+200);f.tick();
+ assert.equal(f.timers.size,0);f.nav.destroy();
+});
+
+
+test('unmounted discovery waits for asynchronous host layout before another jump',()=>{
+ const f=fixture();f.nav.navigateTo('target');
+ for(let i=0;i<3;i++){
+  f.viewport.scrollHeight=10000+i*500;
+  f.tick();assert.equal(f.calls.length,1,'must let the host finish the first probe');
+ }
+ // The requested message mounts after 240ms, before any second jump.
+ f.element.isConnected=true;f.setTop(f.viewport.scrollTop+200);f.tick();
+ assert.equal(f.calls.length,1);assert.equal(f.timers.size,0);f.nav.destroy();
+});
+
+test('changing mounted windows cannot narrow search bounds until stable',()=>{
+ const f=fixture();let neighborTop=100;
+ f.markers.unshift({id:'before',element:{isConnected:true,getBoundingClientRect:()=>({top:neighborTop-f.viewport.scrollTop,height:40,width:400})}});
+ f.nav.navigateTo('target');
+ for(let i=0;i<8;i++){
+  neighborTop+=100;f.tick();assert.equal(f.calls.length,1);
+ }
+ for(let i=0;i<3;i++)f.tick();
+ assert.equal(f.calls.length,2,'resume discovery once the mounted window has settled');
+ f.nav.destroy();
 });

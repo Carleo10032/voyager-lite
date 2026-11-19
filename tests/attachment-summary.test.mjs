@@ -13,7 +13,72 @@ class Element {
 }
 const scope = { module: { exports: {} }, Element };
 vm.runInNewContext(bundle.outputFiles[0].text, scope);
-const { userTurnSummary, userTurnDisplayOverride, displayTurnSummary } = scope.module.exports;
+const { turnSummary, userTurnSummary, userTurnDisplayOverride, displayTurnSummary } = scope.module.exports;
+
+test('Gemini strips visually-hidden author prefix ("你说") and duplicate hidden prompt copies without altering real text', () => {
+  function textNode(value) { return { nodeType: 3, nodeValue: value }; }
+  function domEl(tag, { classes = [], attrs = {}, style = {}, children = [], connected = true } = {}) {
+    const el = new Element('');
+    el.tagName = tag.toUpperCase();
+    el.nodeType = 1;
+    el.classList = classes;
+    el.style = style;
+    el.isConnected = connected;
+    el.childNodes = children;
+    el.getAttribute = name => (name in attrs ? attrs[name] : null);
+    el.hasAttribute = name => name in attrs;
+    el.matches = () => false;
+    for (const c of children) c.parentElement = el;
+    el.querySelectorAll = selector => {
+      const out = [];
+      const walk = node => {
+        for (const c of node.childNodes ?? []) {
+          if (c.nodeType !== 1) continue;
+          if (selector.includes('.query-text') && c.classList.includes('query-text')) out.push(c);
+          if (selector.includes('[data-bubble-text]') && c.hasAttribute('data-bubble-text')) out.push(c);
+          walk(c);
+        }
+      };
+      walk(el);
+      return out;
+    };
+    return el;
+  }
+
+  // Case 1: Gemini bubble with cdk-visually-hidden "你说", visible .query-text, and a second duplicate/aria-hidden copy.
+  const geminiBubble = domEl('div', {
+    classes: ['user-query-bubble-with-background'],
+    children: [
+      domEl('span', { classes: ['cdk-visually-hidden'], children: [textNode('你说')] }),
+      domEl('div', {
+        classes: ['query-text'],
+        children: [
+          domEl('span', { classes: ['cdk-visually-hidden'], children: [textNode('你说')] }),
+          domEl('p', { classes: ['query-text-line'], children: [textNode('帮我写个脚本')] }),
+          domEl('span', { attrs: { 'aria-hidden': 'true' }, children: [textNode('帮我写个脚本')] }),
+        ],
+      }),
+      domEl('div', {
+        classes: ['query-text'],
+        children: [domEl('p', { children: [textNode('帮我写个脚本')] })],
+      }),
+    ],
+  });
+  assert.equal(turnSummary(geminiBubble), '帮我写个脚本');
+
+  // Case 2: User genuinely starts their prompt with "你说" — must NOT be stripped!
+  const genuine = domEl('div', {
+    classes: ['user-query-bubble-with-background'],
+    children: [
+      domEl('span', { classes: ['cdk-visually-hidden'], children: [textNode('你说')] }),
+      domEl('div', {
+        classes: ['query-text'],
+        children: [domEl('p', { children: [textNode('你说今天天气怎么样')] })],
+      }),
+    ],
+  });
+  assert.equal(turnSummary(genuine), '你说今天天气怎么样');
+});
 
 test('attachment-only turns show a file name or a fallback without changing text messages', () => {
   assert.equal(userTurnSummary(new Element('', null, true)), '【附件】');

@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.0 — 2026-11-20
+
+- Restore full ChatGPT virtualized timeline support with a read-only MAIN-world thread mirror (`dist/chatgpt-thread-mirror.js`) supporting ChatGPT's November `rows` virtualizer, deep provider stacks, prompt-top anchor geometry, seamless anchor-to-bubble marker upgrades, active-page scroller scoping, and automatic DOM-only fallback when the mirror is unavailable.
+- Unify navigation across all four platforms (ChatGPT, Claude, Gemini, Grok) with zero `siteId` branching in `TimelineNavigation` / `VirtualizedTimelineNavigation`, cross-platform `resolveLiveTarget`, and a 100% opaque theme-matched transition veil for distant (>1.5 viewports) or unmounted jumps that waits for target centering, visible image decoding, and layout/DOM quiet (`350ms`, `2200ms` safety cap) before fading out smoothly; nearby mounted jumps remain instant without a veil.
+- Unify prompt text extraction across all platforms to select the first visible prompt container and strip visually-hidden (`cdk-visually-hidden`, `sr-only`), `aria-hidden`, hidden/display-none, and UI chrome descendants, fixing Gemini's hidden "你说" prefix and duplicated prompt summaries while preserving LaTeX source text.
+- Redesign Dots style as containerless Antigravity-style circular dots that share Ruler's exact vertically centered compact layout (`18px` gap up to `360px` span, `4–10px` adaptive dot size), continuous hit targets, and instant left-side rich hover previews, with hover/active platform-accent color transitions.
+- Remove the outer rail container across all timeline styles and drop the "Hide outer container" option from the popup.
+
 ## 2.2.15 — 2026-11-12
 
 - Restore the timeline on the redesigned Grok web UI using its current message markers.

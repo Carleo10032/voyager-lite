@@ -389,63 +389,45 @@ export class TimelineDotLayer {
       if (!hiddenIndices.has(index)) visibleIndices.push(index);
     }
 
-    const ruler = this.options.getStyle() === 'ruler';
+    const style = this.options.getStyle();
+    const dots = style === 'dots';
+    const spread = style === 'ruler' || dots;
     const count = visibleIndices.length;
-    const span = Math.min(280, Math.max(14, (this.track?.clientHeight ?? 340) - 40));
-    const gap = count > 1 ? Math.min(14, span / (count - 1)) : 14;
+    const baseGap = dots ? 18 : 14;
+    const maxSpan = dots ? 360 : 280;
+    const span = Math.min(maxSpan, Math.max(baseGap, (this.track?.clientHeight ?? 340) - 40));
+    const gap = count > 1 ? Math.min(baseGap, span / (count - 1)) : baseGap;
     this.bar?.style.setProperty('--lite-ruler-gap', `${gap}px`);
-    const rankOffsets = ruler
+    const rankOffsets = spread
       ? visibleIndices.map((_, rank) => (rank - (count - 1) / 2) * gap)
       : denseMarkerOffsets(count);
-    // Dense spacing can land each 3px tick on a different subpixel phase.
+    // Dense spacing can land each tick/dot on a different subpixel phase.
     // Snap its painted top and thickness to device pixels, keeping the hit area intact.
     const dpr = window.devicePixelRatio || 1;
-    const tickHeight = Math.round(3 * dpr) / dpr;
-    this.bar?.style.setProperty('--lite-tick-height', `${tickHeight}px`);
+    const paintedHeight = dots ? 10 : Math.round(3 * dpr) / dpr;
+    if (!dots) this.bar?.style.setProperty('--lite-tick-height', `${paintedHeight}px`);
     const bounds = this.content?.getBoundingClientRect();
     const middle = bounds ? bounds.top + bounds.height / 2 : 0;
     return new Map(visibleIndices.map((markerIndex, rank) => {
       const offset = rankOffsets[rank];
-      const aligned = Math.round((middle + offset - tickHeight / 2) * dpr) / dpr - middle + tickHeight / 2;
+      const aligned =
+        Math.round((middle + offset - paintedHeight / 2) * dpr) / dpr - middle + paintedHeight / 2;
       return [markerIndex, aligned];
     }));
   }
 
-  private applyDotPosition(dot: DotElement, index: number, compactOffset?: number): void {
-    if (this.options.getStyle() === 'compact' || this.options.getStyle() === 'ruler') {
-      const offset = compactOffset ?? 0;
-      const operator = offset < 0 ? '-' : '+';
-      dot.style.top = `calc(50% ${operator} ${Math.abs(offset)}px)`;
-      dot.style.setProperty('--timeline-compact-offset', `${offset}px`);
-      return;
-    }
-
-    dot.style.removeProperty('--timeline-compact-offset');
-    dot.style.setProperty('--n', String(this.normalizedPositions[index] || 0));
-    if (this.usePixelTop) {
-      dot.style.top = `${Math.round(this.yPositions[index])}px`;
-    } else {
-      dot.style.removeProperty('top');
-    }
+  private applyDotPosition(dot: DotElement, _index: number, compactOffset?: number): void {
+    const offset = compactOffset ?? 0;
+    const operator = offset < 0 ? '-' : '+';
+    dot.style.top = `calc(50% ${operator} ${Math.abs(offset)}px)`;
+    dot.style.setProperty('--timeline-compact-offset', `${offset}px`);
   }
   render(): void {
     if (!this.bar || !this.track || !this.content) return;
     const hidden = this.geometry.getHiddenMarkerIndices();
-    const style = this.options.getStyle();
-    const dense = style !== 'dots';
-    const top = this.track.scrollTop;
-    const height = this.track.clientHeight;
-    const positions = this.yPositions.filter((_, index) => !hidden.has(index));
-    const first = Math.max(0, Math.min(height, (positions[0] ?? height / 2) - top));
-    const last = Math.max(first, Math.min(height, (positions.at(-1) ?? height / 2) - top));
-    this.bar.style.setProperty('--lite-rail-top', `${first}px`);
-    this.bar.style.setProperty('--lite-rail-height', `${last - first}px`);
-    const buffer = Math.max(100, height);
-    const start = dense ? 0 : this.lowerBound(this.yPositions, top - buffer);
-    const end = dense
-      ? this.markers.length - 1
-      : Math.max(start - 1, this.upperBound(this.yPositions, top + height + buffer));
-    const offsets = dense ? this.buildCompactMarkerOffsets(hidden) : new Map<number, number>();
+    const start = 0;
+    const end = this.markers.length - 1;
+    const offsets = this.buildCompactMarkerOffsets(hidden);
     const visibleIds = new Set<string>();
     const orderedDots: DotElement[] = [];
     for (let index = start; index <= end; index++) {

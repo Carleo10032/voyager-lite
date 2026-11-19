@@ -39,20 +39,79 @@ export class CatalogTimelineAdapter implements TimelineAdapter {
   }
 }
 
+const THREAD_ANCHOR_ATTR = 'data-gv-thread-anchor';
+const THREAD_ANCHOR_LAYER_ATTR = 'data-gv-thread-anchor-layer';
+const THREAD_ANCHOR_SELECTOR = `div[${THREAD_ANCHOR_ATTR}]`;
+
 class CatalogTimelineTurnSource implements TimelineTurnSource {
   readonly navigation = 'virtualized';
   get root(): HTMLElement | null {
     return document.body;
   }
+  private activeScope(): HTMLElement | null {
+    if (this.config.activePageSelector && typeof document.querySelector === 'function') {
+      const active = document.querySelector<HTMLElement>(this.config.activePageSelector);
+      if (active) return active.querySelector<HTMLElement>('main') ?? active;
+      const attrMatch = this.config.activePageSelector.match(/^\[([^\]=]+)/);
+      if (attrMatch && document.querySelector(`[${attrMatch[1]}]`)) return null;
+    }
+    return this.root;
+  }
+  private mirroredAnchors(
+    scope: HTMLElement,
+    isRendered: (element: Element) => boolean,
+  ): HTMLElement[] {
+    if (!this.config.threadMirror || typeof scope.querySelectorAll !== 'function') return [];
+    const routeId =
+      typeof location !== 'undefined'
+        ? (location.pathname.match(/(?:^|\/)c\/([^/?#]+)/)?.[1] ?? null)
+        : null;
+    const layers = Array.from(scope.querySelectorAll<HTMLElement>(`[${THREAD_ANCHOR_LAYER_ATTR}]`));
+    for (const layer of layers) {
+      if (!isRendered(layer)) continue;
+      const owner = layer.getAttribute('data-gv-thread-conversation');
+      if (routeId && owner && owner !== routeId) continue;
+      const anchors = Array.from(
+        layer.querySelectorAll<HTMLElement>(THREAD_ANCHOR_SELECTOR),
+      ).filter(isRendered);
+      if (anchors.length > 0) return anchors;
+    }
+    return [];
+  }
   get anchor(): HTMLElement | null {
+    const scope = this.activeScope();
+    if (!scope) return this.root;
+    const isRendered = renderedCheck();
     return (
-      Array.from(document.querySelectorAll<HTMLElement>(this.config.turnSelector)).find(
-        renderedCheck(),
-      ) ?? this.root
+      Array.from(scope.querySelectorAll<HTMLElement>(this.config.turnSelector)).find(isRendered) ??
+      this.mirroredAnchors(scope, isRendered)[0] ??
+      scope
     );
   }
   count(): number {
-    return document.querySelectorAll(this.config.turnSelector).length;
+    const scope = this.activeScope();
+    if (!scope) return 0;
+    if (this.config.threadMirror) {
+      const anchors = this.mirroredAnchors(scope, renderedCheck());
+      if (anchors.length > 0) return anchors.length;
+    }
+    return scope.querySelectorAll(this.config.turnSelector).length;
+  }
+  resolveLiveTarget(turnKey: string): { element: HTMLElement; mounted: boolean } | null {
+    if (!turnKey) return null;
+    const scope = this.activeScope();
+    if (!scope || typeof scope.querySelectorAll !== 'function') return null;
+    const isRendered = renderedCheck();
+    for (const element of scope.querySelectorAll<HTMLElement>(this.config.turnSelector)) {
+      if (isRendered(element) && hostTurnId(this.config.siteId, element) === turnKey) {
+        return { element, mounted: true };
+      }
+    }
+    if (!this.config.threadMirror) return null;
+    const anchor = this.mirroredAnchors(scope, isRendered).find(
+      (candidate) => candidate.getAttribute(THREAD_ANCHOR_ATTR) === turnKey,
+    );
+    return anchor ? { element: anchor, mounted: false } : null;
   }
   refresh(): boolean {
     return !!this.root;
@@ -61,11 +120,20 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
     return !signal.aborted && this.refresh();
   }
   observe(callback: MutationCallback): MutationObserver {
+    this.detachListeners();
     if (this.config.siteId === 'chatgpt') document.addEventListener('submit', this.onEditSubmit, true);
     if (this.config.siteId === 'claude') document.addEventListener('click', this.onClaudeEditClick, true);
     const observer = new MutationObserver((records, owner) => {
       if (this.shouldRefresh(records)) callback(records, owner);
     });
+    if (
+      this.config.threadMirror &&
+      typeof window !== 'undefined' &&
+      typeof window.addEventListener === 'function'
+    ) {
+      this.onMirrorUpdated = () => callback([], observer);
+      window.addEventListener('message', this.onThreadMessage);
+    }
     if (this.root)
       observer.observe(this.root, {
         childList: true,
@@ -78,6 +146,19 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
     return observer;
   }
   private known: Marker[] = [];
+  private onMirrorUpdated: (() => void) | null = null;
+  private readonly onThreadMessage = (event: MessageEvent): void => {
+    if (event.source !== window || event.origin !== location.origin) return;
+    if (event.data?.__gvType === 'gv-thread-updated') this.onMirrorUpdated?.();
+  };
+  private detachListeners(): void {
+    document.removeEventListener('submit', this.onEditSubmit, true);
+    document.removeEventListener('click', this.onClaudeEditClick, true);
+    if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+      window.removeEventListener('message', this.onThreadMessage);
+    }
+    this.onMirrorUpdated = null;
+  }
   private readonly onClaudeEditClick = (event: Event): void => {
     if (!(event.target instanceof Element)) return;
     const button = event.target.closest('button');
@@ -114,8 +195,26 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
   viewport(element: HTMLElement): HTMLElement {
     if (this.config.scrollContainerSelector) {
       try {
-        const configured = document.querySelector<HTMLElement>(this.config.scrollContainerSelector);
-        if (configured?.contains(element)) return configured;
+        if (typeof element.closest === 'function') {
+          const closest = element.closest<HTMLElement>(this.config.scrollContainerSelector);
+          if (closest) return closest;
+        }
+        const scope = this.activeScope();
+        if (scope && typeof scope.querySelectorAll === 'function') {
+          const isRendered = renderedCheck();
+          const scoped = Array.from(
+            scope.querySelectorAll<HTMLElement>(this.config.scrollContainerSelector),
+          ).filter(isRendered);
+          const containing = scoped.find((candidate) => candidate.contains(element));
+          if (containing) return containing;
+          if ((element === this.root || element === scope) && scoped[0]) return scoped[0];
+        }
+        if (typeof document.querySelectorAll === 'function') {
+          const configured = Array.from(
+            document.querySelectorAll<HTMLElement>(this.config.scrollContainerSelector),
+          ).find((candidate) => candidate.contains(element));
+          if (configured) return configured;
+        }
       } catch {
         /* Fall back to the nearest scroll ancestor for stale catalog selectors. */
       }
@@ -137,25 +236,52 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
   }
 
   read(previous: TimelineMarker[]): TimelineTurnSnapshot {
-    const container = this.root;
-    if (!container) return { markers: [], mountedCount: 0 };
+    const scope = this.activeScope();
+    if (!scope) return { markers: [], mountedCount: 0 };
+    const isRendered = renderedCheck();
     const selector = this.config.turnSelector;
-    const mounted: MountedTurn[] = Array.from(container.querySelectorAll<HTMLElement>(selector))
-      .filter(renderedCheck())
-      .map((element) => {
+    const domElements = Array.from(scope.querySelectorAll<HTMLElement>(selector)).filter(isRendered);
+    const anchors = this.mirroredAnchors(scope, isRendered);
+    let mounted: MountedTurn[];
+    if (anchors.length > 0) {
+      const mountedByKey = new Map<string, HTMLElement>();
+      for (const element of domElements) {
+        const key = hostTurnId(this.config.siteId, element);
+        if (key && !mountedByKey.has(key)) mountedByKey.set(key, element);
+      }
+      mounted = anchors.map((anchor) => {
+        const key = anchor.getAttribute(THREAD_ANCHOR_ATTR) || undefined;
+        const bubble = key ? mountedByKey.get(key) : undefined;
+        const element = bubble ?? anchor;
         const summary = userTurnSummary(element);
         return {
           element,
           summary,
-          attachmentPlaceholder: summary === '【附件】' && (element.matches('[data-cds="UserMessage"]') || !turnSummary(element)),
+          attachmentPlaceholder:
+            summary === '【附件】' &&
+            (bubble ? !turnSummary(bubble) : !(anchor.getAttribute('data-gv-text') ?? '').trim()),
+          displaySummary: userTurnDisplayOverride(this.config.siteId, element),
+          hostTurnId: key,
+        };
+      });
+    } else {
+      mounted = domElements.map((element) => {
+        const summary = userTurnSummary(element);
+        return {
+          element,
+          summary,
+          attachmentPlaceholder:
+            summary === '【附件】' &&
+            (element.matches('[data-cds="UserMessage"]') || !turnSummary(element)),
           displaySummary: userTurnDisplayOverride(this.config.siteId, element),
           hostTurnId: hostTurnId(this.config.siteId, element),
         };
       });
+    }
     for (const turn of mounted)
       if (!this.originalStamps.has(turn.element))
         this.originalStamps.set(turn.element, turn.element.getAttribute('data-gv-turn-id'));
-    const viewport = this.viewport(mounted[0]?.element ?? container);
+    const viewport = this.viewport(mounted[0]?.element ?? scope);
     const viewportTop =
       viewport === document.documentElement || viewport === document.body
         ? 0
@@ -164,7 +290,9 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
       viewport === document.documentElement || viewport === document.body
         ? window.scrollY
         : viewport.scrollTop;
-    const reverse = getComputedStyle(viewport).flexDirection === 'column-reverse';
+    const viewportStyle = getComputedStyle(viewport);
+    const reverse =
+      viewportStyle.flexDirection === 'column-reverse' && /flex/.test(viewportStyle.display);
     const scrollTop = reverse
       ? Math.max(0, viewport.scrollHeight - viewport.clientHeight + offset)
       : offset;
@@ -188,7 +316,8 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
       marker.measuredAt = pass;
     }
     this.ownership.observe(mountedOwnershipTurns(mounted));
-    const assistantByElement = this.assistantSummaries(mounted, container);
+    const realMounted = mounted.filter((turn) => turn.element.getAttribute(THREAD_ANCHOR_ATTR) === null);
+    const assistantByElement = this.assistantSummaries(realMounted, scope);
     const markers = this.known.map((marker, index) => ({
       id: marker.id,
       element: marker.element,
@@ -199,6 +328,7 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
         assistantByElement.get(marker.element) ?? old.get(marker.id)?.assistantSummary ?? '',
       baseN: this.known.length === 1 ? 0.5 : index / Math.max(1, this.known.length - 1),
       starred: false,
+      hostTurnId: marker.hostTurnId,
       hash: marker.hash,
       center: marker.center,
       measuredAt: marker.measuredAt,
@@ -228,7 +358,11 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
   }
 
   shouldRefresh(records: MutationRecord[]): boolean {
-    const selectors = [this.config.turnSelector, this.config.assistantTurnSelector]
+    const selectors = [
+      this.config.turnSelector,
+      this.config.assistantTurnSelector,
+      this.config.threadMirror ? `[${THREAD_ANCHOR_LAYER_ATTR}], ${THREAD_ANCHOR_SELECTOR}` : '',
+    ]
       .filter(Boolean)
       .join(', ');
     const elementOf = (node: Node): Element | null =>
@@ -240,7 +374,7 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
     return records.some((record) => {
       if (
         elementOf(record.target)?.closest(
-          '[data-gv-turn-navigator], .timeline-preview-panel, .timeline-preview-toggle, .timeline-tooltip',
+          '[data-gv-turn-navigator], .timeline-preview-panel, .timeline-preview-toggle, .timeline-tooltip, .gv-navigation-veil, .gv-navigation-loading',
         )
       )
         return false;
@@ -253,8 +387,7 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
   }
 
   stop(): void {
-    document.removeEventListener('submit', this.onEditSubmit, true);
-    document.removeEventListener('click', this.onClaudeEditClick, true);
+    this.detachListeners();
     for (const [element, original] of this.originalStamps) {
       if (original === null) element.removeAttribute('data-gv-turn-id');
       else element.setAttribute('data-gv-turn-id', original);

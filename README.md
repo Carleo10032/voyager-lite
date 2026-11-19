@@ -6,13 +6,13 @@
 
 - 自动识别 ChatGPT、Claude、Gemini、Grok。
 - 时间线支持节点、刻度（悬浮琴键）、紧凑三种样式、跳转、搜索、预览及星标。
-- 支持直接跳转、隐藏外框。未加载的消息恢复后自动校正位置，目标可见后停止校正。定位较慢时，时间线右侧显示加载圆圈。
+- 四个平台均支持即时居中跳转；远距离或未挂载跳转时自动以纯色不透明遮罩覆盖对话区，待定位与布局稳定后一次性淡出展现。ChatGPT 通过只读 MAIN-world 虚拟列表镜像提供完整已加载轮次和精确偏移，并保留纯 DOM 虚拟化降级兜底。
 - 按平台配色并分别保存时间线设置，适配明暗主题。
 - 背景特效：飘雪、樱花、雨。
 
 ## 安装
 
-1. 在 [Releases](https://github.com/Carleo10032/voyager-lite/releases) 下载 `Voyager-Lite-2.2.15.zip` 并解压，也可按下方说明从源码构建。
+1. 在 [Releases](https://github.com/Carleo10032/voyager-lite/releases) 下载 `Voyager-Lite-3.0.0.zip` 并解压，也可按下方说明从源码构建。
 2. 打开 `chrome://extensions` 或 `edge://extensions`，开启开发者模式。
 3. 点击「加载已解压的扩展程序」，选择直接包含 `manifest.json` 的文件夹。
 4. 刷新已打开的对话页面。
@@ -40,4 +40,4 @@ npm run build
 
 本项目按 GNU GPLv3 分发，保留上游作者 Jonathan Braat、Jesse Zhang 的版权声明。完整许可见 [LICENSE](LICENSE)，来源与修改记录见 [UPSTREAM.md](UPSTREAM.md)，第三方依赖许可见 [public/licenses](public/licenses)。安装包对应的完整源码可在同一 Release 下载，或检出对应版本标签后构建。
 
-基于 Voyager 1.9.0，提交 `e854e349ef8de867e6dc587033e46425320a165f`。Grok 页面选择器参考 [ai-prompts-toc](https://github.com/orezeno22/ai-prompts-toc)。
+基于 Voyager 1.9.0，提交 `e854e349ef8de867e6dc587033e46425320a165f`。ChatGPT 虚拟列表镜像参考 [chatgpt-voyager](https://github.com/TanChuping/chatgpt-voyager)（GPL-3.0）；Grok 页面选择器参考 [ai-prompts-toc](https://github.com/orezeno22/ai-prompts-toc)。

@@ -72,9 +72,11 @@ export class TimelineEngine {
         direction
           ? this.maybeRefreshMarkersForNavigation(direction)
           : this.maybeRefreshMarkersForInteraction(target),
+      resolveLiveTarget: (hostTurnId) => adapter.turns.resolveLiveTarget?.(hostTurnId) ?? null,
       resolveStoredId: (id) => this.state.resolveMarkerIdForStorageId(id),
       onActiveChange: () => this.view.updateActiveDotUI(),
       onPendingChange: (id) => this.view?.setNavigationPending(id),
+      onCurtainChange: (active) => this.view?.setNavigationCurtain(active),
       onScroll: () => {
         this.view.syncTimelineTrackToMain();
         this.view.updateVirtualRangeAndRender();
@@ -649,8 +651,10 @@ export class TimelineEngine {
     if (node instanceof HTMLElement) {
       return (
         node.classList.contains('gv-timestamp') ||
+        node.classList.contains('gv-navigation-veil') ||
+        node.classList.contains('gv-navigation-loading') ||
         node.classList.contains(TimelineEngine.SEARCH_HIGHLIGHT_CLASS) ||
-        !!node.closest(`.gv-timestamp, .${TimelineEngine.SEARCH_HIGHLIGHT_CLASS}`)
+        !!node.closest(`.gv-timestamp, .gv-navigation-veil, .gv-navigation-loading, .${TimelineEngine.SEARCH_HIGHLIGHT_CLASS}`)
       );
     }
 

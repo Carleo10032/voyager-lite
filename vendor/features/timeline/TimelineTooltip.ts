@@ -157,13 +157,14 @@ export class TimelineTooltip {
     const minW = 160;
     const leftAvail = Math.max(0, dotRect.left - gap - viewportPad);
     const rightAvail = Math.max(0, vw - dotRect.right - gap - viewportPad);
-    let placement: 'left' | 'right' = this.options.getContext().style === 'ruler' && leftAvail >= 160
+    const style = this.options.getContext().style;
+    const rich = style === 'ruler' || style === 'dots';
+    let placement: 'left' | 'right' = rich && leftAvail >= 160
       ? 'left' : rightAvail > leftAvail ? 'right' : 'left';
     let avail = placement === 'right' ? rightAvail : leftAvail;
-    const tiers =
-      this.options.getContext().style === 'ruler'
-        ? [320, 280, 240, 200, 160]
-        : [280, 240, 200, 160];
+    const tiers = rich
+      ? [320, 280, 240, 200, 160]
+      : [280, 240, 200, 160];
     const hardMax = Math.max(minW, Math.min(maxW, Math.floor(avail)));
     let width = tiers.find((t) => t <= hardMax) || Math.max(minW, Math.min(hardMax, 160));
     if (width < minW && placement === 'left' && rightAvail > leftAvail) {
@@ -191,7 +192,8 @@ export class TimelineTooltip {
     }
     const tip = this.element;
     tip.setAttribute('dir', 'auto');
-    tip.classList.toggle('gv-timeline-ruler-tooltip', this.options.getContext().style === 'ruler');
+    const style = this.options.getContext().style;
+    tip.classList.toggle('gv-timeline-ruler-tooltip', style === 'ruler' || style === 'dots');
     const dotId = dot.dataset.targetTurnId || '';
     if (tip.classList.contains('visible') && this.tooltipDotId === dotId) {
       this.refresh(dot);
@@ -220,7 +222,8 @@ export class TimelineTooltip {
     // Ruler ticks are a dense, precision-hover control. Delaying their preview
     // makes a successful hit feel missed, so only the roomier node style keeps
     // the hover-intent guard.
-    if (this.options.getContext().style === 'ruler') {
+    const style = this.options.getContext().style;
+    if (style === 'ruler' || style === 'dots') {
       this.show(dot);
       return;
     }
@@ -309,7 +312,8 @@ export class TimelineTooltip {
     const tip = this.element;
     tip.setAttribute('dir', 'auto');
     if (!tip.classList.contains('visible')) return;
-    tip.classList.toggle('gv-timeline-ruler-tooltip', this.options.getContext().style === 'ruler');
+    const style = this.options.getContext().style;
+    tip.classList.toggle('gv-timeline-ruler-tooltip', style === 'ruler' || style === 'dots');
     const p = this.computePlacementInfo(dot);
     const height = this.renderTooltipContent(dot, p.width);
     this.placeTooltipAt(dot, p.placement, p.width, height);
@@ -320,7 +324,8 @@ export class TimelineTooltip {
     if (!tip) return 0;
 
     const content = this.options.getContent(dot);
-    if (this.options.getContext().style !== 'ruler') {
+    const style = this.options.getContext().style;
+    if (style !== 'ruler' && style !== 'dots') {
       tip.removeAttribute('aria-label');
       const fullText = content.text;
       const layout = this.truncateToThreeLines(fullText, width);

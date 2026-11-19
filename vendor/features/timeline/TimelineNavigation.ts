@@ -7,6 +7,7 @@ import { VirtualizedTimelineNavigation } from './VirtualizedTimelineNavigation';
 export interface TimelineNavigationMarker {
   id: string;
   element: HTMLElement;
+  hostTurnId?: string;
   hash?: string;
   center?: number;
   measuredAt?: number;
@@ -23,10 +24,12 @@ interface TimelineNavigationOptions {
   getTrackHeight(): number;
   /** Refresh an interaction target, or check for new turns at a navigation boundary. */
   refreshMarkers(target: HTMLElement | null, direction?: Direction): boolean;
+  resolveLiveTarget?(hostTurnId: string): { element: HTMLElement; mounted: boolean } | null;
   resolveStoredId(storedId: string): string | null;
   onActiveChange(id: string | null): void;
   onScroll(): void;
   onPendingChange?(id: string | null): void;
+  onCurtainChange?(active: boolean): void;
   animateRunner(fromIndex: number, toIndex: number, duration: number): void;
 }
 
@@ -66,6 +69,10 @@ export class TimelineNavigation {
           () => this.options.getMarkers(),
           (id) => this.setActive(id),
           (id) => this.options.onPendingChange?.(id),
+          {
+            resolveLiveTarget: options.resolveLiveTarget,
+            onCurtainChange: options.onCurtainChange,
+          },
         )
       : null;
   }
@@ -165,7 +172,8 @@ export class TimelineNavigation {
   navigateToMarker(turnId: string, index = -1, source: 'dot' | 'preview' = 'dot'): void {
     if (this.destroyed) return;
     if (this.virtualized) {
-      this.options.refreshMarkers(null);
+      const target = this.options.getMarkers().find((marker) => marker.id === turnId)?.element ?? null;
+      this.options.refreshMarkers(target);
       this.virtualized.navigateTo(turnId);
       return;
     }

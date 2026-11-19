@@ -5,7 +5,12 @@ export function hostTurnId(site: string, element: HTMLElement): string | undefin
   const attr = (name: string): string | undefined =>
     element.closest(`[${name}]`)?.getAttribute(name) || undefined;
   if (site === 'chatgpt') {
-    return attr('data-turn-key') || attr('data-message-id') || attr('data-chatgpt-search-message-ids');
+    return (
+      attr('data-gv-thread-anchor') ||
+      attr('data-turn-key') ||
+      attr('data-message-id') ||
+      attr('data-chatgpt-search-message-ids')
+    );
   }
   if (site === 'claude') return attr('data-turn-key') || attr('data-message-id');
   if (site === 'grok') {

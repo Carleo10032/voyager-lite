@@ -25,6 +25,7 @@ export interface TimelineMarker {
   baseN: number;
   starred: boolean;
   /** Remembered plugin geometry for turns outside a virtualized DOM window. */
+  hostTurnId?: string;
   hash?: string;
   center?: number;
   measuredAt?: number;

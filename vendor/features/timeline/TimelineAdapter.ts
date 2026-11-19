@@ -7,6 +7,11 @@ export interface TimelineTurnSnapshot {
   readonly mountedCount: number;
 }
 
+export interface LiveNavigationTarget {
+  readonly element: HTMLElement;
+  readonly mounted: boolean;
+}
+
 /** A source owns selectors, discovery and its host's observation rules. */
 export interface TimelineTurnSource {
   readonly root: HTMLElement | null;
@@ -15,6 +20,7 @@ export interface TimelineTurnSource {
   readonly navigation: 'mounted' | 'virtualized';
   initialize(signal: AbortSignal): Promise<boolean>;
   read(previous: TimelineMarker[]): TimelineTurnSnapshot;
+  resolveLiveTarget?(hostTurnId: string): LiveNavigationTarget | null;
   count(): number;
   refresh(): boolean;
   observe(callback: MutationCallback): MutationObserver;

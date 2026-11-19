@@ -423,8 +423,14 @@ export function rememberedMarkers(
   mounted: readonly MountedTurn[],
 ): Marker[] {
   const current = new Map(mounted.map((turn) => [turn.element, hashString(turn.summary)]));
+  const mountedHostIds = new Set(
+    mounted.map((turn) => turn.hostTurnId).filter((id): id is string => Boolean(id)),
+  );
   return known.filter(
-    (marker) => !marker.element.isConnected || current.get(marker.element) === marker.hash,
+    (marker) =>
+      !marker.element.isConnected ||
+      current.get(marker.element) === marker.hash ||
+      (!!marker.hostTurnId && mountedHostIds.has(marker.hostTurnId)),
   );
 }
 

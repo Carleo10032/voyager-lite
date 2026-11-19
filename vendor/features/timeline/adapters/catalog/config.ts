@@ -10,6 +10,8 @@ export interface CatalogTimelineConfig {
   readonly accountIdAttributes?: readonly string[];
   readonly turnItemSelector?: string;
   readonly scrollContainerSelector?: string;
+  readonly activePageSelector?: string;
+  readonly threadMirror?: boolean;
   readonly yieldWhenSelector?: string;
   readonly position: 'left' | 'right';
   readonly pluginId: string;

@@ -8,7 +8,7 @@ export function readSettings(raw: Record<string, unknown>, siteId: string): Time
   return {
     enabled: (raw[enabledKey(siteId)] ?? raw.liteTimeline) !== false,
     timelineStyle: style === 'compact' || style === 'ruler' ? style : 'dots',
-    hideContainer: get('HideContainer') === true,
+    hideContainer: true,
     draggableTimeline: false,
     markerLevelEnabled: false,
     preventAutoScrollEnabled: false,
@@ -16,7 +16,7 @@ export function readSettings(raw: Record<string, unknown>, siteId: string): Time
   };
 }
 export function settingsPatch(siteId: string, patch: Partial<TimelineSettingsValues>): Record<string, unknown> {
-  const fields = { timelineStyle:'Style', hideContainer:'HideContainer' } as const;
+  const fields = { timelineStyle:'Style' } as const;
   const result: Record<string, unknown> = {};
   for (const [field, suffix] of Object.entries(fields)) {
     if (field in patch) result[timelineSettingKey(siteId, suffix)] = patch[field as keyof typeof fields];
