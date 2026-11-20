@@ -109,13 +109,13 @@ export class TimelineNavigation {
     });
   }
 
-  computeActiveByScroll(): void {
+  computeActiveByScroll(options?: { appendedLatest?: boolean }): void {
     const viewport = this.scrollContainer;
     const markers = this.options.getMarkers();
     if (this.destroyed || this.isScrolling || !viewport || markers.length === 0) return;
     if (this.virtualized) {
       this.virtualized.measure();
-      this.virtualized.refreshActive();
+      this.virtualized.refreshActive(options?.appendedLatest === true);
       return;
     }
     if (Date.now() < this.navigationActiveLockUntil) return;

@@ -617,3 +617,111 @@ test('user wheel cancels pending veil and settle immediately', () => {
   assert.equal(f.pending.at(-1), null);
   f.navigation.destroy();
 });
+
+test('appending a new visible turn automatically advances the active marker and survives streaming without scroll', () => {
+  let now = 1000;
+  const listeners = new Map();
+  const viewport = {
+    scrollTop: 0,
+    clientHeight: 900,
+    scrollHeight: 900,
+    isConnected: true,
+    getBoundingClientRect: () => ({ top: 0, bottom: 900, height: 900, width: 800 }),
+    scrollTo({ top }) { this.scrollTop = Math.max(0, top); },
+    addEventListener(name, fn) {
+      if (!listeners.has(name)) listeners.set(name, new Set());
+      listeners.get(name).add(fn);
+    },
+    removeEventListener(name, fn) { listeners.get(name)?.delete(fn); },
+  };
+  const makeTurn = (id, getTop) => ({
+    id,
+    element: {
+      isConnected: true,
+      getAttribute: () => null,
+      getBoundingClientRect: () => ({ top: getTop() - viewport.scrollTop, bottom: getTop() - viewport.scrollTop + 40, height: 40, width: 600 }),
+    },
+  });
+  let turn3Top = 760;
+  const markers = [
+    makeTurn('t1', () => 100),
+    makeTurn('t2', () => 380),
+  ];
+  const activeChanges = [];
+  const win = {
+    innerHeight: 900,
+    location: { origin: 'https://gemini.google.com', hash: '' },
+    setTimeout: () => 1,
+    clearTimeout: () => {},
+    requestAnimationFrame: (fn) => { fn(); return 1; },
+    cancelAnimationFrame: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    getComputedStyle: () => ({ display: 'block', visibility: 'visible', flexDirection: 'column' }),
+  };
+  const context = vm.createContext({
+    window: win,
+    location: win.location,
+    document: { documentElement: { clientHeight: 900, scrollHeight: 900 }, body: {} },
+    getComputedStyle: win.getComputedStyle,
+    requestAnimationFrame: win.requestAnimationFrame,
+    cancelAnimationFrame: win.cancelAnimationFrame,
+    Date: { now: () => now },
+    performance: { now: () => now },
+    AbortController,
+    URL,
+    module: { exports: {} },
+  });
+  context.exports = context.module.exports;
+  vm.runInContext(navBundle.outputFiles[0].text, context);
+  const { TimelineNavigation } = context.module.exports;
+
+  const nav = new TimelineNavigation({
+    virtualized: true,
+    getMarkers: () => markers,
+    getMarkerTops: () => [],
+    getMarkerPositions: () => [],
+    getTrackHeight: () => 400,
+    refreshMarkers: () => false,
+    resolveStoredId: (id) => id,
+    onActiveChange: (id) => activeChanges.push(id),
+    onScroll: () => {},
+    animateRunner: () => {},
+  });
+  nav.setViewport(viewport);
+  nav.computeActiveByScroll();
+  assert.equal(nav.activeTurnId, 't2', 'initial active turn is t2 near viewport midpoint');
+
+  // User sends turn 3 in a short conversation (no scroll): active marker switches to t3 immediately.
+  markers.push(makeTurn('t3', () => turn3Top));
+  nav.computeActiveByScroll({ appendedLatest: true });
+  assert.equal(nav.activeTurnId, 't3', 'newly appended visible turn becomes active');
+
+  // Assistant reply finishes streaming and triggers recalc without scroll: t3 stays active.
+  viewport.scrollHeight = 960;
+  nav.computeActiveByScroll({ appendedLatest: false });
+  assert.equal(nav.activeTurnId, 't3', 'streaming completion without scroll keeps newest turn active');
+
+  // Long chat: host scrolled t3 to top of viewport BEFORE markers refreshed (no subsequent scroll event).
+  viewport.scrollHeight = 4000;
+  viewport.scrollTop = 2200;
+  turn3Top = 2260;
+  markers.push(makeTurn('t4', () => 2260));
+  nav.computeActiveByScroll({ appendedLatest: true });
+  assert.equal(nav.activeTurnId, 't4', 'long chat new turn becomes active even when host scrolled before debounce');
+
+  // Distant turn appended far below the fold while user is reading near top must NOT hijack active turn.
+  viewport.scrollTop = 0;
+  for (const fn of listeners.get('scroll') ?? []) fn({});
+  nav.computeActiveByScroll({ appendedLatest: false });
+  assert.equal(nav.activeTurnId, 't2');
+  markers.push(makeTurn('t5', () => 3800));
+  nav.computeActiveByScroll({ appendedLatest: true });
+  assert.equal(nav.activeTurnId, 't2', 'off-screen appended turn does not hijack active selection');
+
+  // Manual scroll to bottom activates the latest turn.
+  viewport.scrollTop = 3100;
+  nav.computeActiveByScroll({ appendedLatest: false });
+  assert.equal(nav.activeTurnId, 't5', 'scrolling to bottom selects latest turn');
+  nav.destroy();
+});

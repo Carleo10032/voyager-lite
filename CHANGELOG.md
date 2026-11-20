@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.1 — 2026-11-20
+
+- Add a clickable platform selector in the popup header area allowing switching between Global (`全局`, applies to all four platforms with mixed-state indicators) and any individual platform (`ChatGPT`, `Claude`, `Gemini`, `Grok`) without switching tabs.
+- Remove the redundant "时间线选项" heading from the timeline style card.
+- Fix the active timeline marker not automatically advancing to the newest turn after a new conversation turn is sent and finishes outputting (when the host scrolls before marker debouncing or in short non-scrollable chats).
+- Eliminate the style-switch color flash when switching into Dots style (suppress transitions during style toggle) and fix dark-mode active/hover dot specificity so only the active dot is highlighted immediately.
+
 ## 3.0.0 — 2026-11-20
 
 - Restore full ChatGPT virtualized timeline support with a read-only MAIN-world thread mirror (`dist/chatgpt-thread-mirror.js`) supporting ChatGPT's November `rows` virtualizer, deep provider stacks, prompt-top anchor geometry, seamless anchor-to-bubble marker upgrades, active-page scroller scoping, and automatic DOM-only fallback when the mirror is unavailable.

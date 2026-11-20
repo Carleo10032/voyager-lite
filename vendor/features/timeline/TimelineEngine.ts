@@ -440,15 +440,28 @@ export class TimelineEngine {
       }
       return;
     }
+    const previousLastId = previousMarkers[previousMarkers.length - 1]?.id ?? null;
+    const nextLastId = nextMarkers[nextMarkers.length - 1]?.id ?? null;
+    const appendedLatest =
+      previousMarkers.length > 0 &&
+      nextMarkers.length > previousMarkers.length &&
+      nextLastId !== null &&
+      nextLastId !== previousLastId &&
+      !previousMarkers.some((marker) => marker.id === nextLastId);
     const elements = nextMarkers.map((marker) => marker.element);
     this.view.measureMarkers(elements);
     this.state.replaceMarkers(nextMarkers);
     this.timestamps?.update(previousMarkers, nextMarkers);
     this.view.updateTimelineGeometry();
     // Virtualized adapters select the viewport's nearest turn instead of Gemini's initial last turn.
-    if (this.adapter.turns.navigation === 'virtualized') this.navigation.computeActiveByScroll();
-    else if (!this.navigation.activeTurnId && this.state.markers.length > 0)
+    if (this.adapter.turns.navigation === 'virtualized') {
+      this.navigation.computeActiveByScroll({ appendedLatest });
+    } else if (
+      (!this.navigation.activeTurnId || appendedLatest) &&
+      this.state.markers.length > 0
+    ) {
       this.navigation.activeTurnId = this.state.markers[this.state.markers.length - 1].id;
+    }
     this.updateIntersectionObserverTargetsFromMarkers();
     this.view.syncTimelineTrackToMain();
     this.view.updateVirtualRangeAndRender();

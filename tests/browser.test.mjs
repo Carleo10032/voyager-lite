@@ -82,8 +82,8 @@ test('real Chromium extension: four adapters, navigation, live settings, stars, 
   }
   const id=new URL(worker.url()).host;
   const popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup.html`);
-  await popup.waitForFunction(()=>document.querySelector('#platform')?.textContent==='当前页面不支持');
-  assert.equal(await popup.getByRole('button',{name:'樱花',exact:true}).count(),0);
+  await popup.waitForFunction(()=>document.querySelector('#platform')?.textContent?.includes('全局'));
+  assert.equal(await popup.getByRole('button',{name:'樱花',exact:true}).count(),1);
   await popup.locator('body').screenshot({path:'tests/popup-preview.png'});
   assert.deepEqual(errors,[],`No uncaught errors: ${errors.join('; ')}`);
  }finally{await context.close();await fs.rm(profile,{recursive:true,force:true});}

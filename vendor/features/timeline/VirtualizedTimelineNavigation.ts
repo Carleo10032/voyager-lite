@@ -105,6 +105,7 @@ export class VirtualizedTimelineNavigation {
   private markerCenters: number[] = [];
   private measuringPass = 0;
   private activeTurnId: string | null = null;
+  private lockedScrollTop: number | null = null;
   private navigationActiveLockUntil = 0;
   private pendingNavigationId: string | null = null;
   private pendingNavigationUntil = 0;
@@ -160,15 +161,39 @@ export class VirtualizedTimelineNavigation {
   reset(): void {
     this.markerCenters = [];
     this.activeTurnId = null;
+    this.lockedScrollTop = null;
     this.clearPendingNavigation();
     this.lastHandledHash = null;
   }
 
-  refreshActive(): void {
-    if (this.activeTurnId && this.markers.some((marker) => marker.id === this.activeTurnId)) {
+  refreshActive(appendedLatest = false): void {
+    if (!this.markers.length) {
+      this.lockedScrollTop = null;
+      this.setActiveTurn(null);
+      return;
+    }
+    if (this.pendingNavigationId) return;
+    const currentScrollTop = this.getScrollTop();
+    if (appendedLatest) {
+      const last = this.markers[this.markers.length - 1];
+      if (this.isAtScrollBottom() || this.isMarkerAtOrAboveViewportBottom(last)) {
+        this.navigationActiveLockUntil = 0;
+        this.lockedScrollTop = currentScrollTop;
+        this.setActiveTurn(last.id);
+        return;
+      }
+    }
+    const activeValid =
+      !!this.activeTurnId && this.markers.some((marker) => marker.id === this.activeTurnId);
+    if (
+      activeValid &&
+      this.lockedScrollTop !== null &&
+      Math.abs(currentScrollTop - this.lockedScrollTop) < 2
+    ) {
       this.onActiveChange(this.activeTurnId, this.activeTurnId);
       return;
     }
+    this.lockedScrollTop = null;
     this.updateActiveFromScroll();
   }
 
@@ -181,15 +206,21 @@ export class VirtualizedTimelineNavigation {
 
   private updateActiveFromScroll = (): void => {
     if (!this.markers.length) {
+      this.lockedScrollTop = null;
       this.setActiveTurn(null);
       return;
     }
     if (Date.now() < this.navigationActiveLockUntil) return;
+    const currentScrollTop = this.getScrollTop();
+    if (this.lockedScrollTop !== null && Math.abs(currentScrollTop - this.lockedScrollTop) >= 2) {
+      this.lockedScrollTop = null;
+    }
+    if (this.markerCenters.length !== this.markers.length) this.measure();
     if (this.isAtScrollBottom()) {
       this.setActiveTurn(this.markers[this.markers.length - 1]?.id ?? null);
       return;
     }
-    const ref = this.getScrollTop() + this.getViewportHeight() * ACTIVE_ANCHOR;
+    const ref = currentScrollTop + this.getViewportHeight() * ACTIVE_ANCHOR;
     let low = 0;
     let high = this.markerCenters.length;
     while (low < high) {
@@ -315,6 +346,7 @@ export class VirtualizedTimelineNavigation {
     if (this.disposed) return;
     const marker = this.findMarker(turnId);
     if (!marker) return;
+    this.lockedScrollTop = null;
     this.navigationActiveLockUntil = Date.now() + NAVIGATION_ACTIVE_LOCK_MS;
     this.setActiveTurn(marker.id);
     const resolved = this.resolveNavigationTarget(marker);
@@ -395,16 +427,19 @@ export class VirtualizedTimelineNavigation {
 
   private finishPendingNavigation(arrived: boolean): void {
     this.clearPendingNavigation();
-    if (!arrived) {
-      this.navigationActiveLockUntil = 0;
-      this.measure();
-      const reference = this.getScrollTop() + this.getViewportHeight() * ACTIVE_ANCHOR;
-      const mounted = this.markers.filter((marker) => isRenderedTarget(marker.element));
-      const nearest = mounted.reduce<NavigationMarker | undefined>((best, marker) =>
-        !best || Math.abs(this.centerOf(marker.element) - reference) <
-          Math.abs(this.centerOf(best.element) - reference) ? marker : best, undefined);
-      this.setActiveTurn(nearest?.id ?? null);
+    if (arrived) {
+      this.lockedScrollTop = this.getScrollTop();
+      return;
     }
+    this.lockedScrollTop = null;
+    this.navigationActiveLockUntil = 0;
+    this.measure();
+    const reference = this.getScrollTop() + this.getViewportHeight() * ACTIVE_ANCHOR;
+    const mounted = this.markers.filter((marker) => isRenderedTarget(marker.element));
+    const nearest = mounted.reduce<NavigationMarker | undefined>((best, marker) =>
+      !best || Math.abs(this.centerOf(marker.element) - reference) <
+        Math.abs(this.centerOf(best.element) - reference) ? marker : best, undefined);
+    this.setActiveTurn(nearest?.id ?? null);
   }
 
   /**
@@ -454,7 +489,7 @@ export class VirtualizedTimelineNavigation {
         now - this.pendingLastActivityAt >= VEIL_QUIET_MS &&
         !this.hasLoadingVisibleImages();
       if (settled || now >= this.curtainUntil) {
-        this.clearPendingNavigation();
+        this.finishPendingNavigation(true);
         return;
       }
       this.schedulePendingNavigationHop(VEIL_HOP_MS);
@@ -473,7 +508,7 @@ export class VirtualizedTimelineNavigation {
         ? rect.top >= viewportTop && rect.bottom <= viewportBottom
         : rect.top <= viewportTop && rect.bottom >= viewportBottom;
       if (readable) {
-        this.clearPendingNavigation();
+        this.finishPendingNavigation(true);
         return;
       }
       const offset = this.getScrollTop();
@@ -495,7 +530,7 @@ export class VirtualizedTimelineNavigation {
         return;
       }
       if (Math.abs(destination - offset) <= 3) {
-        this.clearPendingNavigation();
+        this.finishPendingNavigation(true);
         return;
       }
       this.pendingStableReads = 0;
@@ -694,7 +729,14 @@ export class VirtualizedTimelineNavigation {
     const viewportHeight = this.getViewportHeight();
     const scrollHeight = this.getScrollHeight();
     return (
-      scrollHeight > viewportHeight && this.getScrollTop() + viewportHeight >= scrollHeight - 2
+      scrollHeight > viewportHeight && this.getScrollTop() + viewportHeight >= scrollHeight - 8
     );
+  }
+
+  private isMarkerAtOrAboveViewportBottom(marker: NavigationMarker | undefined): boolean {
+    if (!marker || !isRenderedTarget(marker.element)) return false;
+    const rect = marker.element.getBoundingClientRect();
+    const viewportBottom = this.getViewportTop() + this.getViewportHeight();
+    return rect.top <= viewportBottom;
   }
 }

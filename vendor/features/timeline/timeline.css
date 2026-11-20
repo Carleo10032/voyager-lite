@@ -692,31 +692,38 @@ html[data-gv-scheme='dark'] .timeline-left-slider::before {
 .gemini-timeline-bar.gv-timeline-style-dots .timeline-runner-ring {
   display: none;
 }
+.gemini-timeline-bar.gv-timeline-style-dots {
+  --lite-dot-idle-color: rgba(0, 0, 0, 0.16);
+}
+html[data-gv-scheme='dark'] .gemini-timeline-bar.gv-timeline-style-dots {
+  --lite-dot-idle-color: rgba(255, 255, 255, 0.22);
+}
 .gemini-timeline-bar.gv-timeline-style-dots .timeline-dot::after {
   width: clamp(4px, calc(var(--lite-ruler-gap, 18px) - 4px), 10px);
   height: clamp(4px, calc(var(--lite-ruler-gap, 18px) - 4px), 10px);
   box-sizing: border-box;
   border: none;
   box-shadow: none;
+  background-color: var(--lite-dot-idle-color);
+  opacity: 1;
   transform: translate(-50%, -50%);
-  transition: background-color 120ms ease;
-}
-.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot:not(.starred)::after {
-  background-color: rgba(0, 0, 0, 0.16);
-}
-html[data-gv-scheme='dark'] .gemini-timeline-bar.gv-timeline-style-dots .timeline-dot:not(.starred)::after {
-  background-color: rgba(255, 255, 255, 0.22);
-}
-.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot:hover::after,
-.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot:focus-visible::after,
-.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot.active::after {
-  background-color: var(--timeline-dot-active-color);
-  box-shadow: none;
-  transform: translate(-50%, -50%);
+  transition: background-color 100ms ease;
 }
 .gemini-timeline-bar.gv-timeline-style-dots .timeline-dot.starred::after {
   background-color: var(--timeline-star-color);
   box-shadow: none;
+  opacity: 1;
+}
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot.active::after,
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot:hover::after,
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot:focus-visible::after {
+  background-color: var(--timeline-dot-active-color);
+  box-shadow: none;
+  opacity: 1;
+  transform: translate(-50%, -50%);
+}
+.gemini-timeline-bar.gv-timeline-switching .timeline-dot::after {
+  transition: none !important;
 }
 @media (prefers-reduced-motion: reduce) {
   .gemini-timeline-bar.gv-timeline-style-dots .timeline-dot::after { transition: none; }

@@ -5,7 +5,7 @@ import type { TimelineStyle } from '@/core/types/common';
 import type { TranslationKey } from '@/utils/translations';
 
 import { Button } from '../../../components/ui/button';
-import { Card, CardContent, CardTitle } from '../../../components/ui/card';
+import { Card, CardContent } from '../../../components/ui/card';
 import { Label } from '../../../components/ui/label';
 import { SettingToggleRow } from './SettingToggleRow';
 
@@ -21,6 +21,8 @@ export interface TimelineSettingsValues {
 
 export interface TimelineSettingsCardProps {
   values: TimelineSettingsValues;
+  /** True in global mode when individual platforms currently have different styles. */
+  styleMixed?: boolean;
   /** One key per call; the popup mirrors it into state and storage. */
   onChange: (patch: Partial<TimelineSettingsValues>) => void;
   onResetPosition: () => void;
@@ -42,6 +44,7 @@ const TIMELINE_STYLE_OPTIONS: readonly {
 
 export function TimelineSettingsCard({
   values,
+  styleMixed = false,
   onChange,
   onResetPosition,
   onViewStarredHistory,
@@ -55,26 +58,30 @@ export function TimelineSettingsCard({
 
   return (
     <Card className="p-4 transition-all hover:shadow-md">
-      <CardTitle className="mb-4">{t('timelineOptions')}</CardTitle>
       <CardContent className="space-y-4 p-0">
         <div hidden={!isVisible('timelineStyle')}>
-          <Label className="mb-2 block text-sm font-medium">{t('timelineStyle')}</Label>
+          <div className="mb-3 flex items-center justify-between">
+            <Label className="block text-sm font-medium">{t('timelineStyle')}</Label>
+            {styleMixed && <span className="text-muted-foreground text-xs">各平台不同</span>}
+          </div>
           <div className="bg-secondary/60 relative grid grid-cols-3 gap-1 rounded-xl p-1">
-            <div
-              className="bg-primary pointer-events-none absolute top-1 bottom-1 w-[calc((100%-16px)/3)] rounded-lg shadow-sm transition-all duration-300 ease-out"
-              style={{ left: activeStyle?.left ?? '4px' }}
-            />
+            {!styleMixed && (
+              <div
+                className="bg-primary pointer-events-none absolute top-1 bottom-1 w-[calc((100%-16px)/3)] rounded-lg shadow-sm transition-all duration-300 ease-out"
+                style={{ left: activeStyle?.left ?? '4px' }}
+              />
+            )}
             {TIMELINE_STYLE_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 // Node levels have a shape only on the dots rail.
                 disabled={values.markerLevelEnabled && option.value !== 'dots'}
                 className={`relative z-10 rounded-lg px-2 py-2 text-sm font-bold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 ${
-                  values.timelineStyle === option.value
+                  !styleMixed && values.timelineStyle === option.value
                     ? 'text-primary-foreground'
                     : 'text-muted-foreground enabled:hover:text-foreground'
                 }`}
-                aria-pressed={values.timelineStyle === option.value}
+                aria-pressed={!styleMixed && values.timelineStyle === option.value}
                 onClick={() => onChange({ timelineStyle: option.value })}
               >
                 {t(option.label)}

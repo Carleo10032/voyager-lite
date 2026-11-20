@@ -157,6 +157,8 @@ export class TimelineView {
 
   private resizeIdleTimer: number | null = null;
 
+  private styleSwitchRaf: number | null = null;
+
   private resizeIdleDelay = 140;
 
   previewPanel: TimelinePreviewPanel | null = null;
@@ -368,6 +370,10 @@ export class TimelineView {
     this.resizeObserver?.disconnect();
     this.dotLayer.destroy();
     if (this.resizeIdleTimer !== null) clearTimeout(this.resizeIdleTimer);
+    if (this.styleSwitchRaf !== null) {
+      cancelAnimationFrame(this.styleSwitchRaf);
+      this.styleSwitchRaf = null;
+    }
     this.slider?.destroy();
     this.slider = null;
     this.placement.destroy();
@@ -391,6 +397,11 @@ export class TimelineView {
   applyTimelineStyle(): void {
     const bar = this.ui.timelineBar;
     if (!bar) return;
+    if (this.styleSwitchRaf !== null) {
+      cancelAnimationFrame(this.styleSwitchRaf);
+      this.styleSwitchRaf = null;
+    }
+    bar.classList.add('gv-timeline-switching');
     const compact = this.timelineStyle === 'compact';
     const ruler = this.timelineStyle === 'ruler';
     const dots = this.timelineStyle === 'dots';
@@ -410,6 +421,11 @@ export class TimelineView {
     this.previewPanel?.setFloatingToggleSuppressed(!compact);
     this.updateVirtualRangeAndRender();
     this.updateSlider();
+    void bar.offsetHeight;
+    this.styleSwitchRaf = requestAnimationFrame(() => {
+      this.styleSwitchRaf = null;
+      bar.classList.remove('gv-timeline-switching');
+    });
   }
 
   syncTimelineTrackToMain(): void {}
