@@ -21,7 +21,7 @@ import {
 } from './settings';
 
 const t=(key:TranslationKey)=>zh[key]?.message ?? key;
-const visible=new Set(['timelineStyle']);
+const visible=new Set(['timelineStyle','timelineSide']);
 const allSiteIds=sites.map(item=>item.siteId);
 
 function Popup(){
@@ -191,7 +191,7 @@ function Popup(){
           </div>
           <Switch id="timeline-enabled" checked={values.enabled} onChange={event=>void write(enabledPatch(scope,event.target.checked,allSiteIds))}/>
         </div></Card>
-        {(values.enabled || values.enabledMixed) && <TimelineSettingsCard values={values} styleMixed={values.styleMixed} onChange={change}
+        {(values.enabled || values.enabledMixed) && <TimelineSettingsCard values={values} styleMixed={values.styleMixed} sideMixed={values.sideMixed} onChange={change}
           onResetPosition={()=>{}}
           onViewStarredHistory={()=>{}} isVisible={id=>visible.has(id)} t={t}/>}
         <VisualEffectPicker value={effect} onChange={value=>void write({gvVisualEffect:value,gvSnowEffect:false})} t={t}/>

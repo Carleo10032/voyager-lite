@@ -59,8 +59,14 @@ export class TimelinePreviewPanel {
   constructor(
     private readonly anchorElement: HTMLElement,
     private readonly mountAnchor: HTMLElement = document.body,
-    private readonly railPosition?: 'left' | 'right',
+    private railPosition?: 'left' | 'right',
   ) {}
+
+  setRailPosition(position: 'left' | 'right'): void {
+    this.railPosition = position;
+    this.panelEl?.classList.toggle('timeline-preview-panel-left', position === 'left');
+    this.reposition();
+  }
 
   get isOpen(): boolean {
     return this._isOpen;
@@ -281,6 +287,7 @@ export class TimelinePreviewPanel {
     // Panel
     this.panelEl = document.createElement('div');
     this.panelEl.className = 'timeline-preview-panel';
+    this.panelEl.classList.toggle('timeline-preview-panel-left', this.railPosition === 'left');
     this.hoverBridgeEl = document.createElement('div');
     this.hoverBridgeEl.className = PREVIEW_HOVER_BRIDGE_CLASS;
     this.hoverBridgeEl.setAttribute('aria-hidden', 'true');
@@ -479,8 +486,14 @@ export class TimelinePreviewPanel {
     );
   }
 
+  private isLeftSide(): boolean {
+    if (this.railPosition === 'left') return true;
+    if (this.railPosition === 'right') return false;
+    return this.isRTLContext();
+  }
+
   /** Position the toggle button beside the timeline bar, vertically centered.
-   *  Keep it on the bar's left side and clamp within viewport bounds. */
+   *  Mirror onto the bar's inward side and clamp within viewport bounds. */
   private positionToggle(): void {
     if (!this.toggleBtn) return;
     const barRect = this.anchorElement.getBoundingClientRect();
@@ -488,7 +501,8 @@ export class TimelinePreviewPanel {
     const gap = 4;
     const minLeft = 8;
     const maxLeft = Math.max(minLeft, window.innerWidth - btnSize - 8);
-    const leftPx = Math.max(minLeft, Math.min(Math.round(barRect.left - btnSize - gap), maxLeft));
+    const rawLeft = this.isLeftSide() ? barRect.right + gap : barRect.left - btnSize - gap;
+    const leftPx = Math.max(minLeft, Math.min(Math.round(rawLeft), maxLeft));
     this.toggleBtn.style.left = `${leftPx}px`;
     this.toggleBtn.style.top = `${Math.round(barRect.top + barRect.height / 2 - btnSize / 2)}px`;
   }
@@ -504,8 +518,7 @@ export class TimelinePreviewPanel {
       ? Math.min(700, window.innerHeight * 0.82)
       : Math.min(500, window.innerHeight * 0.7);
     const barCenterY = barRect.top + barRect.height / 2;
-    // RTL moves the default catalog rail left, so its preview must follow that side too.
-    const isRTL = this.railPosition === 'left' || this.isRTLContext();
+    const isLeftRail = this.isLeftSide();
 
     // Compact paints only ticks; measure the gap from their visible edge,
     // rather than from the wider invisible rail hit area.
@@ -527,14 +540,14 @@ export class TimelinePreviewPanel {
       anchorRight = buttonAnchor.right;
     }
     let left: number;
-    if (isRTL) {
-      // In RTL, bar is on the left — place panel to its right
+    if (isLeftRail) {
+      // Bar is on the left — place panel to its right
       left = anchorRight + gap;
       if (left + panelWidth > window.innerWidth - 8) {
         left = window.innerWidth - panelWidth - 8;
       }
     } else {
-      // In LTR, bar is on the right — place panel to its left
+      // Bar is on the right — place panel to its left
       left = anchorLeft - panelWidth - gap;
       if (left < 8) left = 8;
     }
@@ -560,10 +573,10 @@ export class TimelinePreviewPanel {
     panelHeight: number,
   ): void {
     if (!this.hoverBridgeEl) return;
-    const isRTL = this.railPosition === 'left' || this.isRTLContext();
+    const isLeftRail = this.isLeftSide();
     const panelRight = panelLeft + panelWidth;
-    const bridgeLeft = isRTL ? barRect.right : panelRight;
-    const bridgeWidth = isRTL
+    const bridgeLeft = isLeftRail ? barRect.right : panelRight;
+    const bridgeWidth = isLeftRail
       ? Math.max(0, panelLeft - barRect.right)
       : Math.max(0, barRect.left - panelRight);
     const viewportTop = Math.max(

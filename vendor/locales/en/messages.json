@@ -24,6 +24,18 @@
     "message": "Ruler",
     "description": "Timeline ruler tick style"
   },
+  "timelineSide": {
+    "message": "Timeline position",
+    "description": "Timeline rail side label"
+  },
+  "timelineSideLeft": {
+    "message": "Left",
+    "description": "Place timeline on the left side"
+  },
+  "timelineSideRight": {
+    "message": "Right",
+    "description": "Place timeline on the right side"
+  },
   "timelineCompactOpenPreview": {
     "message": "Open timeline preview",
     "description": "Accessible label for the compact timeline rail"

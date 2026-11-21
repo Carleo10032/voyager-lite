@@ -367,6 +367,7 @@ function observeContainerResize(container: HTMLElement, onResize: () => void): v
 }
 
 let scheduleMirror: (() => void) | null = null;
+let flushMirror: (() => void) | null = null;
 
 function publishThread(
   root: HTMLElement | null,
@@ -412,7 +413,7 @@ export function syncThreadMirror(): number {
     return 0;
   }
   const { layout, entries, container } = list;
-  if (scheduleMirror) observeContainerResize(container, scheduleMirror);
+  if (flushMirror) observeContainerResize(container, flushMirror);
   const sig = layoutSignature(layout);
   const inputs = [
     root,
@@ -449,9 +450,12 @@ export function installThreadMirror(): void {
   if (scope.__voyagerLiteThreadMirrorInstalled) return;
   scope.__voyagerLiteThreadMirrorInstalled = true;
 
-  let scheduled = false;
+  let scheduledTimer: number | null = null;
   const run = (): void => {
-    scheduled = false;
+    if (scheduledTimer !== null) {
+      window.clearTimeout(scheduledTimer);
+      scheduledTimer = null;
+    }
     try {
       syncThreadMirror();
     } catch {
@@ -459,11 +463,11 @@ export function installThreadMirror(): void {
     }
   };
   const schedule = (): void => {
-    if (scheduled) return;
-    scheduled = true;
-    window.setTimeout(run, SYNC_DELAY_MS);
+    if (scheduledTimer !== null) return;
+    scheduledTimer = window.setTimeout(run, SYNC_DELAY_MS);
   };
   scheduleMirror = schedule;
+  flushMirror = run;
 
   const isOwnMutation = (m: MutationRecord): boolean => {
     const target = m.target instanceof Element ? m.target : m.target.parentElement;

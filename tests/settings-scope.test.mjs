@@ -34,6 +34,8 @@ test('global settings apply to every platform and report mixed states when platf
   assert.equal(initial.enabledMixed, false);
   assert.equal(initial.timelineStyle, 'dots');
   assert.equal(initial.styleMixed, false);
+  assert.equal(initial.timelineSide, 'right');
+  assert.equal(initial.sideMixed, false);
 
   // Per-platform edit updates only Gemini; global detects mixed style.
   raw = { ...raw, ...settingsPatch('gemini', { timelineStyle: 'ruler' }, ALL_SITES) };
@@ -41,6 +43,21 @@ test('global settings apply to every platform and report mixed states when platf
   assert.equal(readSettings(raw, 'chatgpt').timelineStyle, 'dots');
   const mixedStyle = readGlobalSettings(raw, ALL_SITES);
   assert.equal(mixedStyle.styleMixed, true);
+
+  // Per-platform side edit updates only Claude; global detects mixed side.
+  raw = { ...raw, ...settingsPatch('claude', { timelineSide: 'left' }, ALL_SITES) };
+  assert.equal(readSettings(raw, 'claude').timelineSide, 'left');
+  assert.equal(readSettings(raw, 'gemini').timelineSide, 'right');
+  const mixedSide = readGlobalSettings(raw, ALL_SITES);
+  assert.equal(mixedSide.sideMixed, true);
+
+  // Global side edit unifies all four platforms.
+  raw = { ...raw, ...settingsPatch(GLOBAL_SCOPE, { timelineSide: 'left' }, ALL_SITES) };
+  for (const id of ALL_SITES) {
+    assert.equal(readSettings(raw, id).timelineSide, 'left', `${id} adopts global left side`);
+  }
+  assert.equal(readGlobalSettings(raw, ALL_SITES).sideMixed, false);
+  assert.equal(readGlobalSettings(raw, ALL_SITES).timelineSide, 'left');
 
   // Global style edit unifies all four platforms (including previously overridden Gemini).
   raw = { ...raw, ...settingsPatch(GLOBAL_SCOPE, { timelineStyle: 'compact' }, ALL_SITES) };

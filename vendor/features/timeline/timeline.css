@@ -216,6 +216,15 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
   transform-origin: right center;
   transition: width 82ms cubic-bezier(.2,.8,.2,1), background-color 100ms ease;
 }
+.gemini-timeline-bar.gv-timeline-style-ruler.gv-timeline-ruler-inward-right .timeline-dot {
+  /* Keep the 96px hit box centered on 50% while clipping its left overhang at the rail's outer edge so it never overlaps a left sidebar. */
+  clip-path: inset(0 0 0 36px);
+}
+.gemini-timeline-bar.gv-timeline-style-ruler.gv-timeline-ruler-inward-right .timeline-dot::after {
+  right: auto;
+  left: 50%;
+  transform-origin: left center;
+}
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.active::after,
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot:hover::after,
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot:focus-visible::after {
@@ -745,19 +754,6 @@ html[data-gv-scheme='dark'] .gemini-timeline-bar.gv-timeline-style-dots {
   filter: none !important;
 }
 
-/* Delayed navigation feedback lives beside the target without shifting the rail. */
-.gv-navigation-loading {
-  position: fixed;
-  z-index: 2147483647;
-  width: 12px;
-  height: 12px;
-  box-sizing: border-box;
-  border: 1.5px solid color-mix(in srgb, var(--timeline-dot-active-color, #5365d9) 22%, transparent);
-  border-top-color: var(--timeline-dot-active-color, #5365d9);
-  border-radius: 50%;
-  pointer-events: none;
-  animation: gv-navigation-spin 0.8s linear infinite;
-}
 /* Opaque transition veil covering only the chat scroller during distant/unmounted jumps. */
 .gv-navigation-veil {
   position: fixed;
@@ -792,7 +788,6 @@ html[data-gv-scheme='dark'] .gv-navigation-veil {
 @keyframes gv-veil-spinner-in { to { opacity: 1; } }
 @keyframes gv-navigation-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .gv-navigation-loading,
   .gv-navigation-veil-spinner { animation: none; }
   .gv-navigation-veil { transition: none; }
 }

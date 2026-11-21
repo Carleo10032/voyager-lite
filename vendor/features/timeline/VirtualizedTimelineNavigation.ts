@@ -16,15 +16,14 @@ const PENDING_NAVIGATION_TIMEOUT_MS = 8000;
 const PENDING_NAVIGATION_HOP_MS = 80;
 const VEIL_HOP_MS = 60;
 const VEIL_QUIET_MS = 350;
-const VEIL_MAX_MS = 2200;
+const VEIL_MAX_MS = 4000;
 const CURTAIN_DISTANCE_VIEWPORTS = 1.5;
 const SETTLED_READS = 3;
 const PROBE_SETTLE_MS = 320;
-const LOADING_DELAY_MS = 200;
 const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
 const LAYOUT_STYLE_RE = /(?:height|transform|top|display|padding|margin)/i;
 const OWN_UI_SELECTOR =
-  '.gv-navigation-veil, .gv-navigation-loading, [data-gv-turn-navigator], [data-gv-thread-anchor-layer]';
+  '.gv-navigation-veil, [data-gv-turn-navigator], [data-gv-thread-anchor-layer]';
 
 type NavigationMarker = TimelineNavigationMarker;
 
@@ -103,6 +102,7 @@ export class VirtualizedTimelineNavigation {
   }
 
   private markerCenters: number[] = [];
+  private markerTops: number[] = [];
   private measuringPass = 0;
   private activeTurnId: string | null = null;
   private lockedScrollTop: number | null = null;
@@ -136,7 +136,6 @@ export class VirtualizedTimelineNavigation {
     private readonly getViewport: () => HTMLElement | null,
     private readonly getMarkers: () => readonly NavigationMarker[],
     private readonly onActiveChange: (turnId: string | null, previousTurnId: string | null) => void,
-    private readonly onPendingChange: (turnId: string | null) => void = () => {},
     private readonly config: VirtualizedNavigationConfig = {},
   ) {}
 
@@ -160,6 +159,7 @@ export class VirtualizedTimelineNavigation {
   /** Route resets retain the scroll target, measuring epoch and navigation lock. */
   reset(): void {
     this.markerCenters = [];
+    this.markerTops = [];
     this.activeTurnId = null;
     this.lockedScrollTop = null;
     this.clearPendingNavigation();
@@ -205,7 +205,8 @@ export class VirtualizedTimelineNavigation {
   }
 
   private updateActiveFromScroll = (): void => {
-    if (!this.markers.length) {
+    const count = this.markers.length;
+    if (!count) {
       this.lockedScrollTop = null;
       this.setActiveTurn(null);
       return;
@@ -215,26 +216,64 @@ export class VirtualizedTimelineNavigation {
     if (this.lockedScrollTop !== null && Math.abs(currentScrollTop - this.lockedScrollTop) >= 2) {
       this.lockedScrollTop = null;
     }
-    if (this.markerCenters.length !== this.markers.length) this.measure();
+    if (this.markerCenters.length !== count || this.markerTops.length !== count) this.measure();
+    const viewportHeight = this.getViewportHeight();
+    const scrollHeight = this.getScrollHeight();
     if (this.isAtScrollBottom()) {
-      this.setActiveTurn(this.markers[this.markers.length - 1]?.id ?? null);
+      this.setActiveTurn(this.markers[count - 1]?.id ?? null);
       return;
     }
-    const ref = currentScrollTop + this.getViewportHeight() * ACTIVE_ANCHOR;
-    let low = 0;
-    let high = this.markerCenters.length;
-    while (low < high) {
-      const mid = (low + high) >> 1;
-      if (this.markerCenters[mid] <= ref) low = mid + 1;
-      else high = mid;
+    if (scrollHeight > viewportHeight && currentScrollTop <= 2) {
+      this.setActiveTurn(this.markers[0]?.id ?? null);
+      return;
     }
-    const previous = Math.max(0, low - 1);
-    const next = Math.min(this.markerCenters.length - 1, low);
-    const index =
-      Math.abs(this.markerCenters[next] - ref) < Math.abs(this.markerCenters[previous] - ref)
-        ? next
-        : previous;
-    this.setActiveTurn(this.markers[index]?.id ?? null);
+
+    // Account for host top header (~48px) and floating composer (~80px) so a turn switches
+    // as soon as it visually leaves the readable viewport band, without switching mid-reply.
+    const topInset = Math.min(48, Math.round(viewportHeight * 0.08));
+    const bottomInset = Math.min(80, Math.round(viewportHeight * 0.12));
+    const bandTop = currentScrollTop + topInset;
+    const bandBottom = Math.max(bandTop + 1, currentScrollTop + viewportHeight - bottomInset);
+    const turnEnd = (index: number): number =>
+      index + 1 < count
+        ? this.markerTops[index + 1]
+        : Math.max(scrollHeight, this.markerTops[index] + 1);
+
+    const lastAtOrBefore = (threshold: number): number => {
+      let low = 0;
+      let high = count;
+      while (low < high) {
+        const mid = (low + high) >> 1;
+        if (this.markerTops[mid] <= threshold) low = mid + 1;
+        else high = mid;
+      }
+      return Math.max(0, Math.min(count - 1, low - 1));
+    };
+    const lastStrictlyBefore = (threshold: number): number => {
+      let low = 0;
+      let high = count;
+      while (low < high) {
+        const mid = (low + high) >> 1;
+        if (this.markerTops[mid] < threshold) low = mid + 1;
+        else high = mid;
+      }
+      return Math.max(0, Math.min(count - 1, low - 1));
+    };
+
+    const activeIndex = this.activeTurnId
+      ? this.markers.findIndex((marker) => marker.id === this.activeTurnId)
+      : -1;
+    if (activeIndex >= 0) {
+      const start = this.markerTops[activeIndex];
+      const end = turnEnd(activeIndex);
+      if (end > bandTop && start < bandBottom) return;
+      const nextIndex = end <= bandTop ? lastAtOrBefore(bandTop) : lastStrictlyBefore(bandBottom);
+      this.setActiveTurn(this.markers[nextIndex]?.id ?? null);
+      return;
+    }
+
+    const ref = currentScrollTop + viewportHeight * ACTIVE_ANCHOR;
+    this.setActiveTurn(this.markers[lastAtOrBefore(ref)]?.id ?? null);
   };
 
   private setScrollTarget(target: HTMLElement | Window | null): void {
@@ -415,7 +454,6 @@ export class VirtualizedTimelineNavigation {
   private clearPendingNavigation(): void {
     this.pendingNavigationId = null;
     this.setCurtain(false);
-    this.onPendingChange(null);
     void this.stopPendingNavigationTimer?.();
     this.stopPendingNavigationTimer = null;
     for (const stop of this.stopUserScrollListeners.splice(0)) void stop();
@@ -489,7 +527,10 @@ export class VirtualizedTimelineNavigation {
         now - this.pendingLastActivityAt >= VEIL_QUIET_MS &&
         !this.hasLoadingVisibleImages();
       if (settled || now >= this.curtainUntil) {
-        this.finishPendingNavigation(true);
+        const landed =
+          settled ||
+          (resolved.mounted && Math.abs(diff) <= this.getViewportHeight() / 2);
+        this.finishPendingNavigation(landed);
         return;
       }
       this.schedulePendingNavigationHop(VEIL_HOP_MS);
@@ -516,8 +557,6 @@ export class VirtualizedTimelineNavigation {
         Math.max(0, this.getScrollHeight() - this.getViewportHeight()),
         elementCenterDestination(target, resolved.element),
       );
-      if (Math.abs(destination - offset) > 3 && now - this.pendingStartedAt >= LOADING_DELAY_MS)
-        this.onPendingChange(marker.id);
       // Wait for both the scroll and the target's document position to settle.
       // A mounted bubble can move when preceding replies finish rendering.
       const stable = this.pendingOffset !== null && this.pendingDestination !== null &&
@@ -538,8 +577,6 @@ export class VirtualizedTimelineNavigation {
       this.schedulePendingNavigationHop();
       return;
     }
-    if (!this.curtainActive && now - this.pendingStartedAt >= LOADING_DELAY_MS)
-      this.onPendingChange(marker.id);
     // A scroll starts an asynchronous host render. Until that render settles,
     // the old mounted window says nothing about which side of the target we
     // landed on. Repeated 80ms jumps can prevent it from mounting at all.
@@ -678,19 +715,28 @@ export class VirtualizedTimelineNavigation {
     const viewportTop = this.getViewportTop();
     const pass = ++this.measuringPass;
     const centers: number[] = [];
+    const tops: number[] = [];
     for (const marker of this.markers) {
       if (isRenderedTarget(marker.element)) {
-        marker.center = this.centerOf(marker.element, scrollTop, viewportTop);
+        const rect = marker.element.getBoundingClientRect();
+        const top = scrollTop + rect.top - viewportTop;
+        marker.top = top;
+        marker.center = top + rect.height / 2;
         marker.measuredAt = pass;
       }
-      // Keep the array monotonic for the active-turn binary search: stale
-      // centers of virtualized-out turns can lag behind re-measured neighbours.
-      const previous = centers[centers.length - 1];
+      // Keep the arrays monotonic for binary search: stale offsets of
+      // virtualized-out turns can lag behind re-measured neighbours.
+      const previousCenter = centers[centers.length - 1];
+      const rawCenter = marker.center ?? 0;
       centers.push(
-        previous !== undefined && (marker.center ?? 0) < previous ? previous : (marker.center ?? 0),
+        previousCenter !== undefined && rawCenter < previousCenter ? previousCenter : rawCenter,
       );
+      const previousTop = tops[tops.length - 1];
+      const rawTop = marker.top ?? rawCenter;
+      tops.push(previousTop !== undefined && rawTop < previousTop ? previousTop : rawTop);
     }
     this.markerCenters = centers;
+    this.markerTops = tops;
   }
 
   centerOf(

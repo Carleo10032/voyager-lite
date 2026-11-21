@@ -5,14 +5,14 @@
 ## 功能
 
 - 自动识别 ChatGPT、Claude、Gemini、Grok。
-- 时间线支持节点、刻度（悬浮琴键）、紧凑三种样式、跳转、搜索、预览及星标。
+- 时间线支持节点、刻度（悬浮琴键）、紧凑三种样式，可切换左侧或右侧布局，并支持跳转、搜索、预览及星标。
 - 四个平台均支持即时居中跳转；远距离或未挂载跳转时自动以纯色不透明遮罩覆盖对话区，待定位与布局稳定后一次性淡出展现。ChatGPT 通过只读 MAIN-world 虚拟列表镜像提供完整已加载轮次和精确偏移，并保留纯 DOM 虚拟化降级兜底。
 - 按平台配色并分别保存时间线设置，适配明暗主题。
 - 背景特效：飘雪、樱花、雨。
 
 ## 安装
 
-1. 在 [Releases](https://github.com/Carleo10032/voyager-lite/releases) 下载 `Voyager-Lite-3.0.1.zip` 并解压，也可按下方说明从源码构建。
+1. 在 [Releases](https://github.com/Carleo10032/voyager-lite/releases) 下载 `Voyager-Lite-3.1.0.zip` 并解压，也可按下方说明从源码构建。
 2. 打开 `chrome://extensions` 或 `edge://extensions`，开启开发者模式。
 3. 点击「加载已解压的扩展程序」，选择直接包含 `manifest.json` 的文件夹。
 4. 刷新已打开的对话页面。

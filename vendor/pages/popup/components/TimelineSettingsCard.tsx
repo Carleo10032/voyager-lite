@@ -2,6 +2,7 @@
 import React from 'react';
 
 import type { TimelineStyle } from '@/core/types/common';
+import type { TimelineSide } from '@/features/timeline/timelineSettings';
 import type { TranslationKey } from '@/utils/translations';
 
 import { Button } from '../../../components/ui/button';
@@ -12,6 +13,7 @@ import { SettingToggleRow } from './SettingToggleRow';
 /** Every timeline setting the card edits; the popup owns the state and persistence. */
 export interface TimelineSettingsValues {
   timelineStyle: TimelineStyle;
+  timelineSide: TimelineSide;
   hideContainer: boolean;
   draggableTimeline: boolean;
   preventAutoScrollEnabled: boolean;
@@ -23,6 +25,8 @@ export interface TimelineSettingsCardProps {
   values: TimelineSettingsValues;
   /** True in global mode when individual platforms currently have different styles. */
   styleMixed?: boolean;
+  /** True in global mode when individual platforms currently have different sides. */
+  sideMixed?: boolean;
   /** One key per call; the popup mirrors it into state and storage. */
   onChange: (patch: Partial<TimelineSettingsValues>) => void;
   onResetPosition: () => void;
@@ -42,9 +46,19 @@ const TIMELINE_STYLE_OPTIONS: readonly {
   { value: 'compact', label: 'timelineStyleCompact', left: 'calc(66.666667% + 1.333333px)' },
 ];
 
+const TIMELINE_SIDE_OPTIONS: readonly {
+  value: TimelineSide;
+  label: TranslationKey;
+  left: string;
+}[] = [
+  { value: 'left', label: 'timelineSideLeft', left: '4px' },
+  { value: 'right', label: 'timelineSideRight', left: 'calc(50% + 2px)' },
+];
+
 export function TimelineSettingsCard({
   values,
   styleMixed = false,
+  sideMixed = false,
   onChange,
   onResetPosition,
   onViewStarredHistory,
@@ -52,6 +66,7 @@ export function TimelineSettingsCard({
   t,
 }: TimelineSettingsCardProps) {
   const activeStyle = TIMELINE_STYLE_OPTIONS.find((o) => o.value === values.timelineStyle);
+  const activeSide = TIMELINE_SIDE_OPTIONS.find((o) => o.value === values.timelineSide);
   // Ruler and compact paint no rail, so only dots has a container to hide. The
   // stored value is kept and applies again when the user returns to dots.
   const containerless = values.timelineStyle !== 'dots';
@@ -83,6 +98,34 @@ export function TimelineSettingsCard({
                 }`}
                 aria-pressed={!styleMixed && values.timelineStyle === option.value}
                 onClick={() => onChange({ timelineStyle: option.value })}
+              >
+                {t(option.label)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div hidden={!isVisible('timelineSide')}>
+          <div className="mb-3 flex items-center justify-between">
+            <Label className="block text-sm font-medium">{t('timelineSide')}</Label>
+            {sideMixed && <span className="text-muted-foreground text-xs">各平台不同</span>}
+          </div>
+          <div className="bg-secondary/60 relative grid grid-cols-2 gap-1 rounded-xl p-1">
+            {!sideMixed && (
+              <div
+                className="bg-primary pointer-events-none absolute top-1 bottom-1 w-[calc((100%-12px)/2)] rounded-lg shadow-sm transition-all duration-300 ease-out"
+                style={{ left: activeSide?.left ?? 'calc(50% + 2px)' }}
+              />
+            )}
+            {TIMELINE_SIDE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                className={`relative z-10 rounded-lg px-2 py-2 text-sm font-bold transition-all duration-200 ${
+                  !sideMixed && values.timelineSide === option.value
+                    ? 'text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                aria-pressed={!sideMixed && values.timelineSide === option.value}
+                onClick={() => onChange({ timelineSide: option.value })}
               >
                 {t(option.label)}
               </button>

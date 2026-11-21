@@ -43,6 +43,14 @@ const THREAD_ANCHOR_ATTR = 'data-gv-thread-anchor';
 const THREAD_ANCHOR_LAYER_ATTR = 'data-gv-thread-anchor-layer';
 const THREAD_ANCHOR_SELECTOR = `div[${THREAD_ANCHOR_ATTR}]`;
 
+function isPendingTurn(siteId: string, element: HTMLElement): boolean {
+  return (
+    siteId === 'gemini' &&
+    typeof element.closest === 'function' &&
+    !!element.closest('pending-request')
+  );
+}
+
 class CatalogTimelineTurnSource implements TimelineTurnSource {
   readonly navigation = 'virtualized';
   get root(): HTMLElement | null {
@@ -275,6 +283,7 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
             (element.matches('[data-cds="UserMessage"]') || !turnSummary(element)),
           displaySummary: userTurnDisplayOverride(this.config.siteId, element),
           hostTurnId: hostTurnId(this.config.siteId, element),
+          pending: isPendingTurn(this.config.siteId, element),
         };
       });
     }
@@ -374,7 +383,7 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
     return records.some((record) => {
       if (
         elementOf(record.target)?.closest(
-          '[data-gv-turn-navigator], .timeline-preview-panel, .timeline-preview-toggle, .timeline-tooltip, .gv-navigation-veil, .gv-navigation-loading',
+          '[data-gv-turn-navigator], .timeline-preview-panel, .timeline-preview-toggle, .timeline-tooltip, .gv-navigation-veil',
         )
       )
         return false;

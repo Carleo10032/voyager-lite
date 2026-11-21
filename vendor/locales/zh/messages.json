@@ -24,6 +24,18 @@
     "message": "刻度",
     "description": "时间线刻度样式"
   },
+  "timelineSide": {
+    "message": "时间线位置",
+    "description": "时间线位置标签"
+  },
+  "timelineSideLeft": {
+    "message": "左侧",
+    "description": "将时间线放在左侧"
+  },
+  "timelineSideRight": {
+    "message": "右侧",
+    "description": "将时间线放在右侧"
+  },
   "timelineCompactOpenPreview": {
     "message": "打开时间线预览",
     "description": "紧凑时间线索引的无障碍标签"

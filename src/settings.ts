@@ -1,4 +1,4 @@
-import { timelineSettingKey } from '../vendor/features/timeline/timelineSettings';
+import { isTimelineSide, timelineSettingKey } from '../vendor/features/timeline/timelineSettings';
 import type { TimelineSettingsValues } from '../vendor/pages/popup/components/TimelineSettingsCard';
 
 export const GLOBAL_SCOPE = 'global';
@@ -7,15 +7,18 @@ export interface ResolvedSettings extends TimelineSettingsValues {
   enabled: boolean;
   enabledMixed?: boolean;
   styleMixed?: boolean;
+  sideMixed?: boolean;
 }
 
 export function enabledKey(siteId: string) { return `liteTimeline:${siteId}`; }
 export function readSettings(raw: Record<string, unknown>, siteId: string): ResolvedSettings {
   const get = (field: Parameters<typeof timelineSettingKey>[1]) => raw[timelineSettingKey(siteId, field)];
   const style = get('Style') ?? raw.liteStyle;
+  const side = get('Side') ?? raw.liteSide;
   return {
     enabled: (raw[enabledKey(siteId)] ?? raw.liteTimeline) !== false,
     timelineStyle: style === 'compact' || style === 'ruler' ? style : 'dots',
+    timelineSide: isTimelineSide(side) ? side : 'right',
     hideContainer: true,
     draggableTimeline: false,
     markerLevelEnabled: false,
@@ -29,11 +32,15 @@ export function readGlobalSettings(raw: Record<string, unknown>, siteIds: readon
   const anyEnabled = perSite.some((item) => item.enabled);
   const firstStyle = perSite[0]?.timelineStyle ?? (raw.liteStyle === 'compact' || raw.liteStyle === 'ruler' ? raw.liteStyle : 'dots');
   const styleMixed = perSite.some((item) => item.timelineStyle !== firstStyle);
+  const firstSide = perSite[0]?.timelineSide ?? (isTimelineSide(raw.liteSide) ? raw.liteSide : 'right');
+  const sideMixed = perSite.some((item) => item.timelineSide !== firstSide);
   return {
     enabled: allEnabled,
     enabledMixed: anyEnabled && !allEnabled,
     timelineStyle: firstStyle,
     styleMixed,
+    timelineSide: firstSide,
+    sideMixed,
     hideContainer: true,
     draggableTimeline: false,
     markerLevelEnabled: false,
@@ -48,16 +55,19 @@ export function enabledPatch(scope: SettingsScope, enabled: boolean, siteIds: re
   return result;
 }
 export function settingsPatch(scope: SettingsScope, patch: Partial<TimelineSettingsValues>, siteIds: readonly string[] = []): Record<string, unknown> {
-  const fields = { timelineStyle:'Style' } as const;
+  const fields = {
+    timelineStyle: { suffix: 'Style', globalKey: 'liteStyle' },
+    timelineSide: { suffix: 'Side', globalKey: 'liteSide' },
+  } as const;
   const result: Record<string, unknown> = {};
-  for (const [field, suffix] of Object.entries(fields)) {
+  for (const [field, spec] of Object.entries(fields)) {
     if (!(field in patch)) continue;
     const value = patch[field as keyof typeof fields];
     if (scope === GLOBAL_SCOPE) {
-      result.liteStyle = value;
-      for (const id of siteIds) result[timelineSettingKey(id, suffix)] = value;
+      result[spec.globalKey] = value;
+      for (const id of siteIds) result[timelineSettingKey(id, spec.suffix)] = value;
     } else {
-      result[timelineSettingKey(scope, suffix)] = value;
+      result[timelineSettingKey(scope, spec.suffix)] = value;
     }
   }
   return result;

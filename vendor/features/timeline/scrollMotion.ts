@@ -60,6 +60,42 @@ export function readScrollOffset(target: ScrollTarget): number {
     : container.scrollTop;
 }
 
+/**
+ * ChatGPT's transcript scroller keeps a sticky-to-bottom lock and an anchor
+ * bookmark that ignore programmatic `scrollTo` calls and yank the viewport back
+ * to the bottom whenever virtualized turns resize. A non-bubbling mouse
+ * `pointerdown` on the scroller itself matches its scrollbar-drag disengage
+ * path without disturbing page or extension listeners, and `pointerup` cleans
+ * up after the async `scroll` event consumes it.
+ */
+function dispatchScrollLockRelease(container: HTMLElement): (() => void) | null {
+  if (
+    typeof PointerEvent !== 'function' ||
+    typeof container.dispatchEvent !== 'function' ||
+    typeof container.hasAttribute !== 'function' ||
+    !container.hasAttribute('data-app-action-timeline-scroll')
+  ) {
+    return null;
+  }
+  try {
+    container.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'mouse', bubbles: false }));
+  } catch {
+    return null;
+  }
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    container.removeEventListener?.('scroll', finish);
+    try {
+      container.dispatchEvent(new PointerEvent('pointerup', { pointerType: 'mouse', bubbles: false }));
+    } catch {
+      /* ignore detached or mocked containers */
+    }
+  };
+  return finish;
+}
+
 function applyScroll(target: ScrollTarget, top: number, behavior: ScrollBehavior): void {
   if (!target || target === window) {
     window.scrollTo({ top: Math.max(0, top), behavior });
@@ -70,8 +106,19 @@ function applyScroll(target: ScrollTarget, top: number, behavior: ScrollBehavior
   const clamped = isReverseScroller(container)
     ? Math.min(0, Math.max(-range, top - range))
     : Math.min(range, Math.max(0, top));
+  const previous = container.scrollTop;
+  const finishRelease =
+    Math.abs(clamped - previous) >= 0.5 ? dispatchScrollLockRelease(container) : null;
   if (container.scrollTo) container.scrollTo({ top: clamped, behavior });
   else container.scrollTop = clamped;
+  if (finishRelease) {
+    if (container.scrollTop === previous) {
+      finishRelease();
+    } else {
+      container.addEventListener?.('scroll', finishRelease, { once: true, passive: true });
+      if (typeof setTimeout === 'function') setTimeout(finishRelease, 50);
+    }
+  }
 }
 
 /** First estimate and mounted landing share the same viewport centre. */

@@ -9,6 +9,7 @@ export interface TimelineNavigationMarker {
   element: HTMLElement;
   hostTurnId?: string;
   hash?: string;
+  top?: number;
   center?: number;
   measuredAt?: number;
 }
@@ -28,7 +29,6 @@ interface TimelineNavigationOptions {
   resolveStoredId(storedId: string): string | null;
   onActiveChange(id: string | null): void;
   onScroll(): void;
-  onPendingChange?(id: string | null): void;
   onCurtainChange?(active: boolean): void;
   animateRunner(fromIndex: number, toIndex: number, duration: number): void;
 }
@@ -68,7 +68,6 @@ export class TimelineNavigation {
           () => this.scrollContainer,
           () => this.options.getMarkers(),
           (id) => this.setActive(id),
-          (id) => this.options.onPendingChange?.(id),
           {
             resolveLiveTarget: options.resolveLiveTarget,
             onCurtainChange: options.onCurtainChange,

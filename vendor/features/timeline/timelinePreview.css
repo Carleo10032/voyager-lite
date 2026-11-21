@@ -72,6 +72,14 @@
   pointer-events: auto;
 }
 
+.timeline-preview-panel.timeline-preview-panel-left {
+  transform: scale(0.96) translateX(-8px);
+}
+
+.timeline-preview-panel.timeline-preview-panel-left.visible {
+  transform: scale(1) translateX(0);
+}
+
 .gv-timeline-preview-hover-bridge {
   position: fixed;
   z-index: 2147483645;

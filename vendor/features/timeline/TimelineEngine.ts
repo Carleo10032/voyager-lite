@@ -31,6 +31,7 @@ export class TimelineEngine {
   private static readonly SETTING_KNOBS: readonly TimelineSettingField[] = [
     'ScrollMode',
     'Style',
+    'Side',
     'HideContainer',
     'Draggable',
     'MarkerLevel',
@@ -75,7 +76,6 @@ export class TimelineEngine {
       resolveLiveTarget: (hostTurnId) => adapter.turns.resolveLiveTarget?.(hostTurnId) ?? null,
       resolveStoredId: (id) => this.state.resolveMarkerIdForStorageId(id),
       onActiveChange: () => this.view.updateActiveDotUI(),
-      onPendingChange: (id) => this.view?.setNavigationPending(id),
       onCurtainChange: (active) => this.view?.setNavigationCurtain(active),
       onScroll: () => {
         this.view.syncTimelineTrackToMain();
@@ -130,6 +130,9 @@ export class TimelineEngine {
       this.view.timelineStyle = next.style;
       this.view.applyTimelineStyle();
     }
+    if (changed('side')) {
+      this.view.setRailPosition(next.side);
+    }
     if (changed('hideContainer')) {
       this.view.hideContainer = next.hideContainer;
       this.view.applyContainerVisibility();
@@ -148,6 +151,7 @@ export class TimelineEngine {
       getContext: () => ({
         style: this.view.timelineStyle,
         previewOpen: this.view.previewPanel?.isOpen ?? false,
+        position: this.view.railPosition,
       }),
       getContent: (dot) => {
         const id = dot.dataset.targetTurnId ?? '';
@@ -247,6 +251,7 @@ export class TimelineEngine {
       const defaults = {
         [this.settingKey('ScrollMode')]: 'jump',
         [this.settingKey('Style')]: 'dots',
+        [this.settingKey('Side')]: 'right',
         [this.settingKey('HideContainer')]: false,
         [this.settingKey('BarWidth')]: null,
         [this.settingKey('Draggable')]: false,
@@ -306,7 +311,7 @@ export class TimelineEngine {
       this.view.placement.restorePosition(
         res?.[this.settingKey('Position')] as TimelinePositionData | undefined,
       );
-      this.view.updateRulerDirection();
+      this.view.setRailPosition(settings.side);
       this.view.previewPanel?.reposition();
 
       // listen for changes from popup and update mode live
@@ -387,6 +392,7 @@ export class TimelineEngine {
     this.navigation.setViewport(
       this.adapter.viewport(this.adapter.turns.anchor ?? this.conversationContainer),
     );
+    this.view.syncRailPlacement();
     return true;
   }
 
@@ -451,6 +457,7 @@ export class TimelineEngine {
     const elements = nextMarkers.map((marker) => marker.element);
     this.view.measureMarkers(elements);
     this.state.replaceMarkers(nextMarkers);
+    this.view.syncRailPlacement();
     this.timestamps?.update(previousMarkers, nextMarkers);
     this.view.updateTimelineGeometry();
     // Virtualized adapters select the viewport's nearest turn instead of Gemini's initial last turn.
@@ -622,6 +629,7 @@ export class TimelineEngine {
     this.navigation.setViewport(
       this.adapter.viewport(this.adapter.turns.anchor ?? this.conversationContainer),
     );
+    this.view.syncRailPlacement();
     if (this.mutationObserver) {
       this.mutationObserver.disconnect();
       this.mutationObserver = this.adapter.turns.observe(this.onTurnsChanged);
@@ -665,9 +673,8 @@ export class TimelineEngine {
       return (
         node.classList.contains('gv-timestamp') ||
         node.classList.contains('gv-navigation-veil') ||
-        node.classList.contains('gv-navigation-loading') ||
         node.classList.contains(TimelineEngine.SEARCH_HIGHLIGHT_CLASS) ||
-        !!node.closest(`.gv-timestamp, .gv-navigation-veil, .gv-navigation-loading, .${TimelineEngine.SEARCH_HIGHLIGHT_CLASS}`)
+        !!node.closest(`.gv-timestamp, .gv-navigation-veil, .${TimelineEngine.SEARCH_HIGHLIGHT_CLASS}`)
       );
     }
 

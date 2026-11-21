@@ -7,6 +7,7 @@ const NATIVE_TIMELINE_SITE_ID = 'gemini';
 export type TimelineSettingField =
   | 'ScrollMode'
   | 'Style'
+  | 'Side'
   | 'HideContainer'
   | 'BarWidth'
   | 'Draggable'
@@ -14,10 +15,16 @@ export type TimelineSettingField =
   | 'Position';
 
 export type TimelineScrollMode = 'jump';
+export type TimelineSide = 'left' | 'right';
+
+export function isTimelineSide(value: unknown): value is TimelineSide {
+  return value === 'left' || value === 'right';
+}
 
 /** The behaviour knobs one rail runs with, whichever site and storage they came from. */
 export interface TimelineSettings {
   readonly style: TimelineStyle;
+  readonly side: TimelineSide;
   readonly scrollMode: TimelineScrollMode;
   readonly hideContainer: boolean;
   readonly draggable: boolean;
@@ -59,8 +66,10 @@ export function readTimelineSettings({
 }: ReadTimelineSettingsInput): TimelineSettings {
   const read = (field: TimelineSettingField) => stored[timelineSettingKey(siteId, field)];
   const storedStyle = read('Style');
+  const storedSide = read('Side');
   const fromStorage: TimelineSettings = {
     style: isTimelineStyle(storedStyle) ? storedStyle : 'dots',
+    side: isTimelineSide(storedSide) ? storedSide : 'right',
     scrollMode: 'jump',
     hideContainer: !!read('HideContainer'),
     draggable: !!read('Draggable'),
@@ -70,6 +79,7 @@ export function readTimelineSettings({
   return {
     ...fromStorage,
     style: pluginStyle(pluginSettings),
+    side: isTimelineSide(pluginSettings.timelineSide) ? pluginSettings.timelineSide : fromStorage.side,
     // Catalog rails have always been draggable unless a plugin turns it off.
     draggable: pluginSettings.draggable !== false,
     markerLevel: pluginSettings.markerLevel === true,

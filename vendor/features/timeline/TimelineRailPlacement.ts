@@ -39,7 +39,7 @@ export class TimelineRailPlacement {
     this.savedPosition = null;
     if (this.bar) {
       this.bar.style.top = '';
-      this.bar.style.left = '';
+      if (this.bar.dataset.gvPosition !== 'left') this.bar.style.left = '';
     }
     this.updateRulerDirection();
     this.options.onPositionRestore();
@@ -142,6 +142,11 @@ export class TimelineRailPlacement {
   /** Grow ruler ticks toward page content, including when dragging across the viewport. */
   updateRulerDirection(left?: number): void {
     if (!this.bar) return;
+    const side = this.bar.dataset.gvPosition;
+    if (side === 'left' || side === 'right') {
+      this.bar.classList.toggle('gv-timeline-ruler-inward-right', side === 'left');
+      return;
+    }
     const barLeft = left ?? this.bar.getBoundingClientRect().left;
     const center = barLeft + (this.bar.offsetWidth || 24) / 2;
     this.bar.classList.toggle('gv-timeline-ruler-inward-right', center < window.innerWidth / 2);

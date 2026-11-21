@@ -18,6 +18,7 @@ export function hostTurnId(site: string, element: HTMLElement): string | undefin
     return response || attr('data-message-id') || attr('data-turn-key');
   }
   if (site === 'gemini') {
+    if (element.closest('pending-request')) return undefined;
     const row = element.closest('user-query')?.parentElement;
     if (row?.parentElement?.matches('infinite-scroller[data-test-id="chat-history-container"]') && row.id) {
       return row.id;

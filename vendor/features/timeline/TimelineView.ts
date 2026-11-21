@@ -48,10 +48,12 @@ export class TimelineView {
 
   hideContainer: boolean = false;
 
-  private navigationIndicator: HTMLElement | null = null;
+  railPosition: 'left' | 'right' = 'right';
+
   private navigationVeil: HTMLElement | null = null;
   private veilRemoveTimer: number | null = null;
-  private pendingTurnId: string | null = null;
+  private boundsResizeObserver: ResizeObserver | null = null;
+  private observedBoundsEl: HTMLElement | null = null;
 
   setNavigationCurtain(active: boolean): void {
     if (this.veilRemoveTimer !== null) {
@@ -119,36 +121,97 @@ export class TimelineView {
     return null;
   }
 
-  setNavigationPending(id: string | null): void {
-    this.pendingTurnId = id;
-    if (!id || this.destroyed) {
-      this.navigationIndicator?.remove();
-      this.navigationIndicator = null;
-      return;
+  private resolveChatBoundsElement(): HTMLElement | null {
+    const viewport = this.options.getViewport();
+    if (
+      viewport &&
+      viewport !== document.documentElement &&
+      viewport !== document.body &&
+      viewport.isConnected
+    ) {
+      return viewport;
     }
+    const sample = this.markers.find((marker) => marker.element?.isConnected)?.element;
+    if (sample) {
+      for (
+        let parent = sample.parentElement;
+        parent && parent !== document.body;
+        parent = parent.parentElement
+      ) {
+        try {
+          if (/(auto|scroll|overlay)/.test(getComputedStyle(parent).overflowY)) {
+            const rect = parent.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) return parent;
+          }
+        } catch {
+          break;
+        }
+      }
+    }
+    return null;
+  }
+
+  private observeChatBounds(target: HTMLElement | null): void {
+    if (this.observedBoundsEl === target) return;
+    this.boundsResizeObserver?.disconnect();
+    this.observedBoundsEl = null;
+    if (!target || typeof ResizeObserver !== 'function' || this.destroyed) return;
+    if (!this.boundsResizeObserver) {
+      this.boundsResizeObserver = new ResizeObserver(() => this.syncRailPlacement());
+    }
+    this.boundsResizeObserver.observe(target);
+    this.observedBoundsEl = target;
+  }
+
+  setRailPosition(position: 'left' | 'right'): void {
+    const changed = this.railPosition !== position;
+    this.railPosition = position;
     const bar = this.ui.timelineBar;
     if (!bar) return;
-    if (!this.navigationIndicator) {
-      const indicator = document.createElement("span");
-      indicator.className = "gv-navigation-loading";
-      indicator.setAttribute("role", "status");
-      indicator.setAttribute("aria-label", "正在定位消息");
-      indicator.title = "正在定位消息";
-      (this.options.mountAnchor ?? document.body).append(indicator);
-      this.navigationIndicator = indicator;
+    bar.dataset.gvPosition = position;
+    this.previewPanel?.setRailPosition(position);
+    this.syncRailPlacement();
+    this.updateRulerDirection();
+    if (changed) {
+      this.options.onStyleChange();
+      this.updateSlider();
     }
-    const dot = Array.from(bar.querySelectorAll<HTMLElement>(".timeline-dot"))
-      .find((node) => node.dataset.targetTurnId === id);
-    const rect = (dot ?? bar).getBoundingClientRect();
-    this.navigationIndicator.style.top = `${rect.top + rect.height / 2 - 6}px`;
-    // Center between the visible rail and the browser scrollbar, leaving room
-    // for overlay scrollbars that do not reduce documentElement.clientWidth.
-    const barRect = bar.getBoundingClientRect();
-    const railCenter = (barRect.left + barRect.right) / 2;
-    const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-    const scrollbarEdge = Math.min(viewportWidth, window.innerWidth - 12);
-    const center = (railCenter + scrollbarEdge) / 2;
-    this.navigationIndicator.style.left = `${Math.max(0, Math.min(center - 6, scrollbarEdge - 12))}px`;
+  }
+
+  /** Keep a left-side rail mirrored 15px inside the chat area's left edge, clearing any host sidebar. */
+  syncRailPlacement(): void {
+    const bar = this.ui.timelineBar;
+    if (!bar || this.destroyed) return;
+    bar.dataset.gvPosition = this.railPosition;
+    if (this.railPosition === 'left') {
+      const boundsEl = this.resolveChatBoundsElement();
+      this.observeChatBounds(boundsEl);
+      const boundsRect = boundsEl?.getBoundingClientRect();
+      const chatLeft =
+        boundsRect &&
+        boundsRect.width > 0 &&
+        boundsRect.left >= 0 &&
+        boundsRect.left < window.innerWidth - 60
+          ? Math.round(boundsRect.left)
+          : 0;
+      const nextLeft = `${chatLeft + 15}px`;
+      bar.style.right = 'auto';
+      if (bar.style.left !== nextLeft) {
+        bar.style.left = nextLeft;
+        this.previewPanel?.reposition();
+        this.updateSlider();
+      }
+    } else {
+      this.observeChatBounds(null);
+      const hadInline = bar.style.left !== '' || bar.style.right !== '';
+      bar.style.left = '';
+      bar.style.right = '';
+      if (hadInline) {
+        this.previewPanel?.reposition();
+        this.updateSlider();
+      }
+    }
+    this.updateRulerDirection();
   }
 
   private firstUserTurnOffset = 0;
@@ -173,6 +236,7 @@ export class TimelineView {
     geometry: TimelineHierarchyGeometry,
     private readonly options: TimelineViewOptions,
   ) {
+    this.railPosition = options.position ?? 'right';
     this.dotLayer = new TimelineDotLayer(() => state.markers, geometry, {
       getStyle: () => this.timelineStyle,
       getViewport: () => this.options.getViewport(),
@@ -182,7 +246,10 @@ export class TimelineView {
       storagePrefix: options.storagePrefix,
       getStyle: () => this.timelineStyle,
       onWidthChange: () => this.applyContainerVisibility(),
-      onPositionRestore: () => this.previewPanel?.reposition(),
+      onPositionRestore: () => {
+        this.syncRailPlacement();
+        this.previewPanel?.reposition();
+      },
     });
   }
   private readonly dotLayer: TimelineDotLayer;
@@ -219,7 +286,10 @@ export class TimelineView {
     this.ui.slider?.classList.toggle(EMPTY_RAIL_CLASS, empty);
     // Initial positioning may have measured a display:none rail before turns loaded.
     // Measure again only after restoring its visible geometry.
-    if (wasEmpty && !empty) this.previewPanel?.reposition();
+    if (wasEmpty && !empty) {
+      this.syncRailPlacement();
+      this.previewPanel?.reposition();
+    }
   }
   startRunner(fromIdx: number, toIdx: number, duration: number): void {
     this.dotLayer.startRunner(fromIdx, toIdx, duration);
@@ -271,11 +341,7 @@ export class TimelineView {
     const bar = document.createElement('div');
     bar.className = 'gemini-timeline-bar';
     anchor.appendChild(bar);
-    if (this.options.position === 'left') {
-      bar.style.right = 'auto';
-      bar.style.left = '15px';
-    }
-    if (this.options.position) bar.dataset.gvPosition = this.options.position;
+    bar.dataset.gvPosition = this.railPosition;
     this.ui.timelineBar = bar;
     const track = document.createElement('div');
     track.className = 'timeline-track';
@@ -297,7 +363,7 @@ export class TimelineView {
     this.ui.sliderHandle = handle;
     this.applyEmptyState();
 
-    this.previewPanel = new TimelinePreviewPanel(bar, anchor, this.options.position);
+    this.previewPanel = new TimelinePreviewPanel(bar, anchor, this.railPosition);
     this.previewPanel.init(this.options.navigate, this.options.search, (id) =>
       this.state.toggleStar(id),
     );
@@ -305,13 +371,14 @@ export class TimelineView {
       getLayout: () => ({
         contentHeight: this.dotLayer.contentHeight,
         padding: this.dotLayer.padding,
-        rtl: this.options.position === 'left' || this.rtl,
+        rtl: this.railPosition === 'left' || this.rtl,
       }),
       onScroll: () => this.updateVirtualRangeAndRender(),
     });
     this.placement.mount(bar);
     this.setupEventListeners();
     // Settings can arrive before mount; apply them before the first marker render.
+    this.syncRailPlacement();
     this.applyContainerVisibility();
     this.applyTimelineStyle();
     this.resizeObserver = new ResizeObserver(() => this.render());
@@ -326,7 +393,6 @@ export class TimelineView {
   }
   updateActiveDotUI(): void {
     this.dotLayer.updateActive();
-    this.setNavigationPending(this.pendingTurnId);
     this.previewPanel?.updateActiveTurn(this.activeTurnId);
   }
   updatePreviewMarkers(): void {
@@ -360,14 +426,24 @@ export class TimelineView {
         signal: this.lifetime.signal,
       });
     }
+    // Catch sidebar transitions that shift the chat container horizontally without resizing it.
+    document.addEventListener(
+      'transitionend',
+      () => {
+        if (this.railPosition === 'left') this.syncRailPlacement();
+      },
+      { passive: true, signal },
+    );
   }
   destroy(): void {
     this.destroyed = true;
-    this.setNavigationPending(null);
     this.setNavigationCurtain(false);
 
     this.lifetime.abort();
     this.resizeObserver?.disconnect();
+    this.boundsResizeObserver?.disconnect();
+    this.boundsResizeObserver = null;
+    this.observedBoundsEl = null;
     this.dotLayer.destroy();
     if (this.resizeIdleTimer !== null) clearTimeout(this.resizeIdleTimer);
     if (this.styleSwitchRaf !== null) {
@@ -435,12 +511,8 @@ export class TimelineView {
     const wasRTL = this.rtl;
     this.rtl = applyRTLClass(language);
     if (wasRTL !== this.rtl) {
-      // Reset inline position so the CSS default for the new direction takes effect
-      if (this.ui.timelineBar) {
-        this.ui.timelineBar.style.top = '';
-        this.ui.timelineBar.style.left = this.options.position === 'left' ? '15px' : '';
-      }
-      this.updateRulerDirection();
+      if (this.ui.timelineBar) this.ui.timelineBar.style.top = '';
+      this.syncRailPlacement();
       this.updateSlider();
       this.previewPanel?.reposition();
     }
@@ -452,6 +524,7 @@ export class TimelineView {
     this.resizeIdleTimer = window.setTimeout(() => {
       this.resizeIdleTimer = null;
       if (this.destroyed) return;
+      this.syncRailPlacement();
       this.options.onResize();
       this.updateTimelineGeometry();
       this.syncTimelineTrackToMain();

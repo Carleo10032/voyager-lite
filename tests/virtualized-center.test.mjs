@@ -12,10 +12,10 @@ function fixture(){
  const marker={id:'target',element};
  const scope={module:{exports:{}},window:win,document:{documentElement:{},body:{},querySelectorAll:()=>[],addEventListener(){},removeEventListener(){}},AbortController,Date:class extends Date {static now(){return now;}},getComputedStyle:()=>({display:'block',flexDirection:'column',scrollPaddingTop:'64px'})};
  vm.runInNewContext(bundle.outputFiles[0].text,scope);
- const markers=[marker], pending=[], active=[];
- const nav=new scope.module.exports.VirtualizedTimelineNavigation(()=>viewport,()=>markers,id=>active.push(id),id=>pending.push(id));
+ const markers=[marker], active=[];
+ const nav=new scope.module.exports.VirtualizedTimelineNavigation(()=>viewport,()=>markers,id=>active.push(id));
  nav.prepare(viewport);nav.measure();element.isConnected=false;
- return {document:scope.document,nav,element,viewport,calls,timers,markers,pending,active,setTop:n=>top=n,setHeight:n=>height=n,wheel(){listeners.get('wheel')?.();}, tick(){now+=80;const next=timers.values().next().value;next?.();}};
+ return {document:scope.document,nav,element,viewport,calls,timers,markers,active,setTop:n=>top=n,setHeight:n=>height=n,wheel(){listeners.get('wheel')?.();}, tick(){now+=80;const next=timers.values().next().value;next?.();}};
 }
 test('unmounted target initially lands at cached centre; exact remount does not scroll again',()=>{
  const f=fixture();f.nav.navigateTo('target');
@@ -105,27 +105,22 @@ test('long reply without a visible user bubble still probes a distant target in 
   assert.equal(f.viewport.scrollTop,4620);assert.equal(f.timers.size,0);f.nav.destroy();
  }
 });
-test('loading is delayed, absent on a fast arrival, and cleared by user cancellation',()=>{
+test('user wheel cancels pending unmounted navigation and stops timers',()=>{
  const f=fixture();f.nav.navigateTo('target');
- assert.ok(!f.pending.includes('target'));f.tick();f.tick();
- assert.ok(!f.pending.includes('target'));f.tick();
- assert.ok(f.pending.includes('target'));f.wheel();assert.equal(f.pending.at(-1),null);f.nav.destroy();
- const fast=fixture();fast.element.isConnected=true;fast.nav.navigateTo('target');
- for(let i=0;i<6;i++)fast.tick();
- assert.ok(!fast.pending.includes('target'));fast.nav.destroy();
+ f.tick();f.tick();f.tick();
+ f.wheel();assert.equal(f.timers.size,0);f.nav.destroy();
 });
-test('timeout clears loading and restores the selection to the actual viewport',()=>{
+test('timeout stops pending navigation and restores the selection to the actual viewport',()=>{
  const f=fixture();f.markers.unshift({id:'visible',center:500,element:{isConnected:true,getBoundingClientRect:()=>({top:480-f.viewport.scrollTop,bottom:520-f.viewport.scrollTop,height:40,width:400})}});
  f.nav.navigateTo('target');
  for(let i=0;i<105;i++)f.tick();
- assert.equal(f.pending.at(-1),null);assert.equal(f.timers.size,0);assert.notEqual(f.active.at(-1),'target');f.nav.destroy();
+ assert.equal(f.timers.size,0);assert.notEqual(f.active.at(-1),'target');f.nav.destroy();
 });
 
-test('a newer click replaces old pending navigation and its loading indicator',()=>{
+test('a newer click replaces old pending navigation cleanly',()=>{
  const f=fixture();f.nav.navigateTo('target');for(let i=0;i<3;i++)f.tick();
  const next={id:'next',center:1020,element:{isConnected:true,getBoundingClientRect:()=>({top:1000-f.viewport.scrollTop,bottom:1040-f.viewport.scrollTop,height:40,width:400})}};
  f.markers.unshift(next);f.nav.navigateTo('next');
- assert.equal(f.pending.at(-1),null);
  f.element.isConnected=true;f.setTop(8000);
  for(let i=0;i<10;i++)f.tick();
  assert.equal(f.viewport.scrollTop,620);assert.equal(f.timers.size,0);f.nav.destroy();

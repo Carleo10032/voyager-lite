@@ -394,7 +394,7 @@ test('CatalogTimelineAdapter scopes ChatGPT scroller, upgrades anchors to bubble
 });
 
 function navFixture(siteId = 'chatgpt') {
-  const writes = [], timers = new Map(), listeners = new Map(), viewportListeners = new Map(), pending = [], curtains = [];
+  const writes = [], timers = new Map(), listeners = new Map(), viewportListeners = new Map(), curtains = [];
   let now = 0, timerId = 0, rafId = 0, anchorTop = 5000, bubbleTop = 5000, bubbleMounted = false, refreshed = 0, refreshTarget = null;
   let activeObserver = null, observerDisconnected = 0;
   const rafs = new Map();
@@ -469,7 +469,6 @@ function navFixture(siteId = 'chatgpt') {
         }
       : undefined,
     onActiveChange() {},
-    onPendingChange: id => pending.push(id),
     onCurtainChange: active => curtains.push({ active, writesAtEvent: writes.length, at: now }),
     onScroll() {},
   });
@@ -478,7 +477,7 @@ function navFixture(siteId = 'chatgpt') {
     for (const fn of [...(listeners.get(type) ?? [])]) fn(event);
   };
   return {
-    navigation, markers, anchor, bubble, viewport, writes, timers, pending, curtains, rafs,
+    navigation, markers, anchor, bubble, viewport, writes, timers, curtains, rafs,
     refreshed: () => refreshed,
     refreshTarget: () => refreshTarget,
     hasObserver: () => !!activeObserver,
@@ -531,7 +530,6 @@ test('ChatGPT long-turn jump resists virtualizer +3500px scroll shift behind vei
   assert.equal(f.hasObserver(), false);
   assert.equal(f.bubble.getBoundingClientRect().top, 380);
   assert.equal(f.curtains.at(-1)?.active, false);
-  assert.equal(f.pending.at(-1), null);
   f.navigation.destroy();
 });
 
@@ -597,13 +595,103 @@ test('all four platforms raise the opaque veil for distant/unmounted jumps, wait
   streaming.setBubbleMounted(true);
   streaming.setBubbleTop(5000);
   streaming.navigation.navigateToMarker('target');
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 70; i++) {
     streaming.fireMutation();
     streaming.tick(60);
   }
   assert.equal(streaming.curtains.at(-1)?.active, false, 'safety cap lifts veil even during streaming');
   assert.equal(streaming.hasObserver(), false);
   streaming.navigation.destroy();
+});
+
+test('ChatGPT scroller disengages sticky-to-bottom lock via non-bubbling mouse pointerdown before scrollTo and cleans up on scroll', async () => {
+  const scrollBundle = await build({
+    entryPoints: ['vendor/features/timeline/scrollMotion.ts'],
+    bundle: true,
+    write: false,
+    format: 'cjs',
+    platform: 'node',
+  });
+  class FakePointerEvent {
+    constructor(type, init = {}) {
+      this.type = type;
+      this.pointerType = init.pointerType ?? '';
+      this.bubbles = !!init.bubbles;
+    }
+  }
+  const scope = {
+    module: { exports: {} },
+    window: {},
+    PointerEvent: FakePointerEvent,
+    getComputedStyle: () => ({ display: 'flex', flexDirection: 'column' }),
+    setTimeout,
+  };
+  vm.runInNewContext(scrollBundle.outputFiles[0].text, scope);
+  const { scrollToEstimatedCenter } = scope.module.exports;
+
+  // Simulate ChatGPT's exact pointerdown + scroll sticky-to-bottom controller.
+  function makeScroller(isChatGpt) {
+    let stickyBottom = true;
+    let dragBaseline = null;
+    const listeners = new Map();
+    const events = [];
+    const scroller = {
+      scrollTop: 42466,
+      scrollHeight: 43198,
+      clientHeight: 732,
+      hasAttribute: name => isChatGpt && name === 'data-app-action-timeline-scroll',
+      addEventListener(type, fn) {
+        if (!listeners.has(type)) listeners.set(type, new Set());
+        listeners.get(type).add(fn);
+      },
+      removeEventListener(type, fn) { listeners.get(type)?.delete(fn); },
+      dispatchEvent(ev) {
+        events.push({ type: ev.type, pointerType: ev.pointerType, bubbles: ev.bubbles });
+        if (ev.type === 'pointerdown' && ev.pointerType === 'mouse' && !ev.bubbles) {
+          dragBaseline = { scrollHeight: scroller.scrollHeight, scrollTop: scroller.scrollTop };
+        } else if (ev.type === 'pointerup') {
+          dragBaseline = null;
+        }
+        for (const fn of [...(listeners.get(ev.type) ?? [])]) fn(ev);
+        return true;
+      },
+      scrollTo(opts) {
+        events.push({ type: 'scrollTo', top: opts.top, hadBaseline: !!dragBaseline });
+        scroller.scrollTop = opts.top;
+      },
+      fireScroll() {
+        if (dragBaseline && dragBaseline.scrollHeight === scroller.scrollHeight && scroller.scrollTop !== dragBaseline.scrollTop) {
+          stickyBottom = false;
+        } else if (stickyBottom) {
+          scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight;
+        }
+        for (const fn of [...(listeners.get('scroll') ?? [])]) fn({ type: 'scroll' });
+      },
+      isStickyBottom: () => stickyBottom,
+      hasBaseline: () => dragBaseline !== null,
+      events,
+    };
+    return scroller;
+  }
+
+  const chatgptScroller = makeScroller(true);
+  scrollToEstimatedCenter(chatgptScroller, 26221, 732, 'instant');
+  assert.equal(chatgptScroller.events[0].type, 'pointerdown');
+  assert.equal(chatgptScroller.events[0].pointerType, 'mouse');
+  assert.equal(chatgptScroller.events[0].bubbles, false);
+  assert.equal(chatgptScroller.events[1].type, 'scrollTo');
+  assert.equal(chatgptScroller.events[1].hadBaseline, true);
+  assert.equal(chatgptScroller.hasBaseline(), true, 'pointerup waits for async scroll event');
+  chatgptScroller.fireScroll();
+  assert.equal(chatgptScroller.isStickyBottom(), false, 'ChatGPT sticky-to-bottom lock disengaged');
+  assert.equal(chatgptScroller.scrollTop, 25855, 'scrollTop stays at target instead of snapping to bottom');
+  assert.equal(chatgptScroller.hasBaseline(), false, 'pointerup cleaned up baseline after scroll');
+
+  // Non-ChatGPT scrollers must NOT receive synthetic pointerdown events.
+  const otherScroller = makeScroller(false);
+  scrollToEstimatedCenter(otherScroller, 26221, 732, 'instant');
+  assert.equal(otherScroller.events.length, 1);
+  assert.equal(otherScroller.events[0].type, 'scrollTo');
 });
 
 test('user wheel cancels pending veil and settle immediately', () => {
@@ -614,7 +702,6 @@ test('user wheel cancels pending veil and settle immediately', () => {
   assert.equal(f.timers.size, 0);
   assert.equal(f.hasObserver(), false);
   assert.equal(f.curtains.at(-1)?.active, false);
-  assert.equal(f.pending.at(-1), null);
   f.navigation.destroy();
 });
 
@@ -710,18 +797,122 @@ test('appending a new visible turn automatically advances the active marker and 
   nav.computeActiveByScroll({ appendedLatest: true });
   assert.equal(nav.activeTurnId, 't4', 'long chat new turn becomes active even when host scrolled before debounce');
 
-  // Distant turn appended far below the fold while user is reading near top must NOT hijack active turn.
+  // Distant turn appended far below the fold while user is reading at top must NOT hijack active turn.
   viewport.scrollTop = 0;
   for (const fn of listeners.get('scroll') ?? []) fn({});
   nav.computeActiveByScroll({ appendedLatest: false });
-  assert.equal(nav.activeTurnId, 't2');
+  assert.equal(nav.activeTurnId, 't1');
   markers.push(makeTurn('t5', () => 3800));
   nav.computeActiveByScroll({ appendedLatest: true });
-  assert.equal(nav.activeTurnId, 't2', 'off-screen appended turn does not hijack active selection');
+  assert.equal(nav.activeTurnId, 't1', 'off-screen appended turn does not hijack active selection');
 
   // Manual scroll to bottom activates the latest turn.
   viewport.scrollTop = 3100;
   nav.computeActiveByScroll({ appendedLatest: false });
   assert.equal(nav.activeTurnId, 't5', 'scrolling to bottom selects latest turn');
+  nav.destroy();
+});
+
+test('active marker switches when the current turn leaves the readable viewport instead of mid-reply', () => {
+  let now = 1000;
+  const listeners = new Map();
+  const viewport = {
+    scrollTop: 0,
+    clientHeight: 800,
+    scrollHeight: 6500,
+    isConnected: true,
+    getBoundingClientRect: () => ({ top: 0, bottom: 800, height: 800, width: 1000 }),
+    addEventListener: (type, fn) => {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(fn);
+    },
+    removeEventListener: (type, fn) => listeners.get(type)?.delete(fn),
+    scrollTo: ({ top }) => { viewport.scrollTop = top; },
+  };
+  const makeTurn = (id, top) => ({
+    id,
+    element: {
+      isConnected: true,
+      getAttribute: () => null,
+      getBoundingClientRect: () => ({ top: top - viewport.scrollTop, bottom: top - viewport.scrollTop + 48, height: 48, width: 600 }),
+    },
+  });
+  // t1 spans [100, 3100), t2 spans [3100, 4800), t3 spans [4800, 6500].
+  const markers = [makeTurn('t1', 100), makeTurn('t2', 3100), makeTurn('t3', 4800)];
+  const win = {
+    innerHeight: 800,
+    location: { origin: 'https://gemini.google.com', hash: '' },
+    setTimeout: () => 1,
+    clearTimeout: () => {},
+    requestAnimationFrame: (fn) => { fn(); return 1; },
+    cancelAnimationFrame: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    getComputedStyle: () => ({ display: 'block', visibility: 'visible', flexDirection: 'column' }),
+  };
+  const context = vm.createContext({
+    window: win,
+    location: win.location,
+    document: { documentElement: { clientHeight: 800, scrollHeight: 6500 }, body: {} },
+    getComputedStyle: win.getComputedStyle,
+    requestAnimationFrame: win.requestAnimationFrame,
+    cancelAnimationFrame: win.cancelAnimationFrame,
+    Date: { now: () => now },
+    performance: { now: () => now },
+    AbortController,
+    URL,
+    module: { exports: {} },
+  });
+  context.exports = context.module.exports;
+  vm.runInContext(navBundle.outputFiles[0].text, context);
+  const { TimelineNavigation } = context.module.exports;
+
+  const nav = new TimelineNavigation({
+    virtualized: true,
+    getMarkers: () => markers,
+    getMarkerTops: () => [],
+    getMarkerPositions: () => [],
+    getTrackHeight: () => 400,
+    refreshMarkers: () => false,
+    resolveStoredId: (id) => id,
+    onActiveChange: () => {},
+    onScroll: () => {},
+    animateRunner: () => {},
+  });
+  nav.setViewport(viewport);
+  nav.computeActiveByScroll();
+  assert.equal(nav.activeTurnId, 't1');
+
+  // Midpoint of t1's 3000px reply (1800) must stay on t1 instead of jumping early to t2.
+  viewport.scrollTop = 1800;
+  nav.computeActiveByScroll();
+  assert.equal(nav.activeTurnId, 't1', 'stays on t1 through the middle of its long reply');
+
+  // Still visible near top edge (t1 ends at 3100, bandTop = 3020 + 48 = 3068 < 3100).
+  viewport.scrollTop = 3020;
+  nav.computeActiveByScroll();
+  assert.equal(nav.activeTurnId, 't1', 'stays on t1 while its bottom is still visible');
+
+  // t1 disappears behind top header (bandTop = 3052 + 48 = 3100 >= 3100): switches to t2.
+  viewport.scrollTop = 3052;
+  nav.computeActiveByScroll();
+  assert.equal(nav.activeTurnId, 't2', 'switches to t2 once t1 leaves the viewport top');
+
+  // Scrolling up: t2 stays active while still above bottom input inset (bandBottom = 2420 + 720 = 3140 > 3100).
+  viewport.scrollTop = 2420;
+  nav.computeActiveByScroll();
+  assert.equal(nav.activeTurnId, 't2', 'stays on t2 while t2 is still visible above bottom composer');
+
+  // t2 disappears behind bottom composer (bandBottom = 2380 + 720 = 3100 <= 3100): switches back to t1.
+  viewport.scrollTop = 2380;
+  nav.computeActiveByScroll();
+  assert.equal(nav.activeTurnId, 't1', 'switches back to t1 once t2 leaves the viewport bottom');
+
+  // Sending a new turn at bottom still immediately highlights the newest turn.
+  viewport.scrollHeight = 7600;
+  viewport.scrollTop = 6800;
+  markers.push(makeTurn('t4', 6900));
+  nav.computeActiveByScroll({ appendedLatest: true });
+  assert.equal(nav.activeTurnId, 't4', 'newly sent turn becomes active immediately');
   nav.destroy();
 });

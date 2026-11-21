@@ -31,7 +31,7 @@ async function main() {
   const apply = () => {
     const settings=readSettings(stored,site.siteId);
     if (!settings.enabled) { controller?.abort(); timeline=undefined; return; }
-    const pluginSettings={timelineStyle:settings.timelineStyle,draggable:false,markerLevel:false};
+    const pluginSettings={timelineStyle:settings.timelineStyle,timelineSide:settings.timelineSide,draggable:false,markerLevel:false};
     if (!timeline) {
       controller = new AbortController();
       timeline = runRouteTimeline({signal:controller.signal, followHash:true, isAlive:()=>{
@@ -39,7 +39,7 @@ async function main() {
       }, createEngine:()=>{
         const current=readSettings(stored,site.siteId);
         const engine = new TimelineEngine(new CatalogTimelineAdapter(config,ownership),controller!.signal);
-        engine.updateSettings({timelineStyle:current.timelineStyle,draggable:false,markerLevel:false});
+        engine.updateSettings({timelineStyle:current.timelineStyle,timelineSide:current.timelineSide,draggable:false,markerLevel:false});
         return engine;
       }});
     } else timeline.engine?.updateSettings(pluginSettings);

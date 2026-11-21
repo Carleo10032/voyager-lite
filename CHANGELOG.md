@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.1.0 — 2026-11-21
+
+- Add a timeline position setting (`左侧` / `右侧`, supporting Global + per-platform scopes with mixed-state detection) that mirrors the rail, Dots / Ruler / Compact ticks, hover preview cards, compact preview panel, and hover bridge with identical spacing (`15px` from the chat area edge, `12px` preview gap), automatically tracking collapsible left sidebars across all four platforms.
+- Remove the redundant small loading spinner circle beside timeline markers/ticks (`.gv-navigation-loading`), leaving the main-area transition veil spinner as the single navigation loading indicator.
+- Fix duplicate ghost timeline markers when sending new turns on Gemini (where `<pending-request>` initially renders without a turn ID and is then replaced by a committed `<div id="...">` container), allowing unidentified/pending turns across all platforms to adopt newly assigned native `hostTurnId`s seamlessly and dropping unmatched detached pending turns.
+- Fix ChatGPT timeline jumps snapping back to the bottom of long/heavy conversations by disengaging ChatGPT's sticky-to-bottom scroll lock via a non-bubbling mouse `pointerdown`/`pointerup` handshake on `[data-app-action-timeline-scroll]` around `scrollTo`, flushing mirrored anchors immediately on virtualizer container resize, raising the veil safety cap to `4000ms`, and restoring the real active marker if a jump times out off-target.
+- Refine scroll-driven active marker highlighting across all platforms to stay on the current turn until it leaves the readable viewport band (instead of switching prematurely halfway through a long reply), while keeping top/bottom edge alignment and automatic switching to newly sent turns.
+
 ## 3.0.1 — 2026-11-20
 
 - Add a clickable platform selector in the popup header area allowing switching between Global (`全局`, applies to all four platforms with mixed-state indicators) and any individual platform (`ChatGPT`, `Claude`, `Gemini`, `Grok`) without switching tabs.

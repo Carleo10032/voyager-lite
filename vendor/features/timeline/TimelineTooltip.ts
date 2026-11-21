@@ -13,7 +13,7 @@ export interface TimelineTooltipContent {
 }
 
 interface TimelineTooltipOptions {
-  getContext(): { style: TimelineStyle; previewOpen: boolean };
+  getContext(): { style: TimelineStyle; previewOpen: boolean; position?: 'left' | 'right' };
   getContent(dot: DotElement): TimelineTooltipContent;
 }
 
@@ -140,8 +140,16 @@ export class TimelineTooltip {
   private previewAnchorRect(dot: HTMLElement): DOMRect {
     const rect = dot.getBoundingClientRect();
     const center = rect.left + rect.width / 2;
-    if (this.options.getContext().style === 'ruler') {
-      return new DOMRect(center - RULER_TICK_WIDTHS[0], rect.top, RULER_TICK_WIDTHS[0], rect.height);
+    const context = this.options.getContext();
+    if (context.style === 'ruler') {
+      const inwardRight =
+        context.position === 'left' || this.bar.classList.contains('gv-timeline-ruler-inward-right');
+      return new DOMRect(
+        inwardRight ? center : center - RULER_TICK_WIDTHS[0],
+        rect.top,
+        RULER_TICK_WIDTHS[0],
+        rect.height,
+      );
     }
     const width = parseFloat(getComputedStyle(dot, '::after').width) || rect.width;
     return new DOMRect(center - width / 2, rect.top, width, rect.height);
@@ -157,10 +165,22 @@ export class TimelineTooltip {
     const minW = 160;
     const leftAvail = Math.max(0, dotRect.left - gap - viewportPad);
     const rightAvail = Math.max(0, vw - dotRect.right - gap - viewportPad);
-    const style = this.options.getContext().style;
+    const context = this.options.getContext();
+    const style = context.style;
     const rich = style === 'ruler' || style === 'dots';
-    let placement: 'left' | 'right' = rich && leftAvail >= 160
-      ? 'left' : rightAvail > leftAvail ? 'right' : 'left';
+    const preferRight =
+      context.position === 'left' || this.bar.classList.contains('gv-timeline-ruler-inward-right');
+    let placement: 'left' | 'right' = preferRight
+      ? rich && rightAvail >= 160
+        ? 'right'
+        : leftAvail > rightAvail
+          ? 'left'
+          : 'right'
+      : rich && leftAvail >= 160
+        ? 'left'
+        : rightAvail > leftAvail
+          ? 'right'
+          : 'left';
     let avail = placement === 'right' ? rightAvail : leftAvail;
     const tiers = rich
       ? [320, 280, 240, 200, 160]
