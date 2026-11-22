@@ -444,14 +444,23 @@ function lowerBound(values: readonly number[], min: number): number {
 export function rememberedMarkers(
   known: readonly Marker[],
   mounted: readonly MountedTurn[],
+  options?: {
+    readonly pruneDisconnected?: boolean;
+    readonly shouldPruneDisconnected?: (marker: Marker) => boolean;
+  },
 ): Marker[] {
   const current = new Map(mounted.map((turn) => [turn.element, hashString(turn.summary)]));
   const mountedHostIds = new Set(
     mounted.map((turn) => turn.hostTurnId).filter((id): id is string => Boolean(id)),
   );
+  const shouldPrune = options?.shouldPruneDisconnected;
+  const keepAllDisconnected = !options?.pruneDisconnected && !shouldPrune;
   return known.filter(
     (marker) =>
-      !marker.element.isConnected ||
+      (!marker.element.isConnected &&
+        (Boolean(marker.pending) ||
+          keepAllDisconnected ||
+          (!options?.pruneDisconnected && !shouldPrune?.(marker)))) ||
       current.get(marker.element) === marker.hash ||
       (!!marker.hostTurnId && mountedHostIds.has(marker.hostTurnId)),
   );

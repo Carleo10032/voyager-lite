@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.2 — 2026-11-22
+
+- Fix Gemini prompt editing leaving duplicate timeline markers and a dead trailing marker by truncating the edited branch on Gemini's `.update-button` click and pruning disconnected committed markers against Gemini's authoritative mounted DOM (and ChatGPT's active `threadMirror` anchor list) while preserving in-place edit/cancel state and `<pending-request>` adoption.
+- Fix Grok prompt editing, stopped-response replacement, and history version switching (`< N / M >`) flickering the timeline rail, jumping left into the sidebar on short 1-turn branches, or leaving duplicate markers, and prevent left-side rails across all four platforms from flashing at the far-left sidebar edge when deleting a conversation or switching routes: ignore Grok's `?rid=` branch query parameter in route-change teardowns, configure native scroll containers for Grok (`[data-testid="chat-transcript-scroller"]`) and Gemini (`infinite-scroller[data-test-id="chat-history-container"]`), persist `lastKnownChatLeft` across route rebuilds while rejecting zero-height collapsing bounds, clear detached Gemini markers immediately when a conversation empties, truncate switched/edited branches on Grok save/Enter/`< N / M >` clicks, and prune disconnected visible/past-end Grok turns while preserving off-screen virtualized turns and open editors.
+
 ## 3.1.1 — 2026-11-22
 
 - Lower timeline UI (`36`–`39`) and background visual effects (`35`) z-index layers from near-`INT_MAX` so image lightboxes, modals, popovers, and overlay drawers stay cleanly above the timeline and snow/sakura/rain effects across Gemini, ChatGPT, Claude, and Grok while keeping timeline controls above chat content, composers, and headers.

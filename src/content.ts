@@ -8,6 +8,18 @@ import { startVisualEffects } from '../vendor/pages/content/visualEffects';
 import { siteForHost, configFor } from './sites';
 import { readSettings } from './settings';
 
+function routeKeyFor(siteId: string, href: string): string {
+  const base = href.split('#')[0];
+  if (siteId !== 'grok') return base;
+  try {
+    const url = new URL(base);
+    url.searchParams.delete('rid');
+    return url.toString();
+  } catch {
+    return base;
+  }
+}
+
 async function main() {
   const scope=globalThis as typeof globalThis & { __voyagerLiteStarted?: boolean };
   // Re-injection must never start a second timeline in the same isolated world.
@@ -19,7 +31,8 @@ async function main() {
     if(message?.type==='lite.getSite')reply({siteId:site.siteId});
   });
   const config = configFor(site);
-  const ownership = new CatalogTurnOwnership({routeId:()=>location.href.split('#')[0], starId:()=>starConversationId(config)});
+  const routeKey = (href: string) => routeKeyFor(site.siteId, href);
+  const ownership = new CatalogTurnOwnership({routeId:()=>routeKey(location.href), starId:()=>starConversationId(config)});
   ownership.begin();
   const observer = new MutationObserver(records => ownership.recordInsertions(records));
   observer.observe(document.body, {childList:true,subtree:true});
@@ -34,7 +47,7 @@ async function main() {
     const pluginSettings={timelineStyle:settings.timelineStyle,timelineSide:settings.timelineSide,draggable:false,markerLevel:false};
     if (!timeline) {
       controller = new AbortController();
-      timeline = runRouteTimeline({signal:controller.signal, followHash:true, isAlive:()=>{
+      timeline = runRouteTimeline({signal:controller.signal, followHash:true, routeKey, isAlive:()=>{
         try { return !!chrome.runtime.id && !!chrome.runtime.getURL(''); } catch { return false; }
       }, createEngine:()=>{
         const current=readSettings(stored,site.siteId);

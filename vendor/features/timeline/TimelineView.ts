@@ -11,6 +11,8 @@ import timelineStyles from './timeline.css?inline';
 import previewStyles from './timelinePreview.css?inline';
 /** Hides every rail surface until the conversation has a turn to mark. */
 const EMPTY_RAIL_CLASS = 'gv-timeline-empty';
+/** Persists the last valid chat-area left offset across route rebuilds so left rails never flash into the sidebar. */
+let lastKnownChatLeft: number | null = null;
 /** Everything a timeline view and its engine put on the page. */
 const TIMELINE_PAGE_NODES = [
   'style[data-gv-timeline]',
@@ -148,6 +150,7 @@ export class TimelineView {
         }
       }
     }
+    if (this.observedBoundsEl?.isConnected) return this.observedBoundsEl;
     return null;
   }
 
@@ -187,13 +190,16 @@ export class TimelineView {
       const boundsEl = this.resolveChatBoundsElement();
       this.observeChatBounds(boundsEl);
       const boundsRect = boundsEl?.getBoundingClientRect();
-      const chatLeft =
+      const validLeft =
         boundsRect &&
         boundsRect.width > 0 &&
+        boundsRect.height > 0 &&
         boundsRect.left >= 0 &&
         boundsRect.left < window.innerWidth - 60
           ? Math.round(boundsRect.left)
-          : 0;
+          : null;
+      if (validLeft !== null) lastKnownChatLeft = validLeft;
+      const chatLeft = validLeft ?? lastKnownChatLeft ?? 0;
       const nextLeft = `${chatLeft + 15}px`;
       bar.style.right = 'auto';
       if (bar.style.left !== nextLeft) {

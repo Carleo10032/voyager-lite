@@ -67,3 +67,103 @@ test('saving a Claude edit removes its old branch while cancel and disabled save
   turns.stop();
   assert.equal(listeners.has('click'), false);
 });
+
+test('updating a Gemini edit removes its old branch while cancel and disabled update leave it intact', () => {
+  const turns = new CatalogTimelineAdapter({ siteId: 'gemini', position: 'right' }, {}).turns;
+  turns.known = [{ hostTurnId: 'first' }, { hostTurnId: 'edited' }, { hostTurnId: 'later' }];
+  const scroller = { matches: (sel) => sel === 'infinite-scroller[data-test-id="chat-history-container"]' };
+  const row = { id: 'edited', parentElement: scroller };
+  const userQuery = { parentElement: row };
+  function geminiButton({ update = false, disabled = false, ariaDisabled = 'false', hostDisabled = false } = {}) {
+    const updateHost = update
+      ? { classList: { contains: (c) => hostDisabled && c === 'gem-button-disabled' } }
+      : null;
+    const btn = new Element(null, disabled);
+    btn.getAttribute = (name) => (name === 'aria-disabled' ? ariaDisabled : null);
+    btn.closest = (selector) => {
+      if (selector === 'button') return btn;
+      if (selector === '.update-button') return updateHost;
+      if (selector === 'user-query') return userQuery;
+      return null;
+    };
+    return btn;
+  }
+  turns.observe(() => {});
+  listeners.get('click')({ target: geminiButton({ update: false }) });
+  listeners.get('click')({ target: geminiButton({ update: true, disabled: true }) });
+  listeners.get('click')({ target: geminiButton({ update: true, ariaDisabled: 'true' }) });
+  listeners.get('click')({ target: geminiButton({ update: true, hostDisabled: true }) });
+  assert.equal(turns.known.length, 3);
+  listeners.get('click')({ target: geminiButton({ update: true }) });
+  assert.equal(turns.known.length, 1);
+  assert.equal(turns.known[0].hostTurnId, 'first');
+  turns.stop();
+  assert.equal(listeners.has('click'), false);
+});
+
+test('sending a Grok edit via save button or Enter clears the old branch while cancel, Shift+Enter, IME, and disabled save leave it intact', () => {
+  const turns = new CatalogTimelineAdapter({ siteId: 'grok', position: 'right' }, {}).turns;
+  turns.known = [{ hostTurnId: 'response-1' }, { hostTurnId: 'response-2' }, { hostTurnId: 'response-3' }];
+  let saveDisabled = true;
+  const saveBtn = new Element(null, false);
+  saveBtn.matches = (sel) => sel === '[data-testid="user-message-editor-save"]';
+  saveBtn.hasAttribute = (name) => name === 'disabled' && saveDisabled;
+  saveBtn.getAttribute = () => null;
+  const responseEl = {
+    id: 'response-2',
+    querySelector: (sel) => (sel === '[data-testid="user-message-editor-save"]' ? saveBtn : null),
+  };
+  saveBtn.closest = (sel) => (sel === 'button' ? saveBtn : sel === '[id^="response-"]' ? responseEl : null);
+  const cancelBtn = new Element(null, false);
+  cancelBtn.matches = () => false;
+  cancelBtn.getAttribute = () => null;
+  cancelBtn.closest = (sel) => (sel === 'button' ? cancelBtn : sel === '[id^="response-"]' ? responseEl : null);
+
+  const editor = new Element(null, false);
+  editor.closest = (sel) => (sel === '[data-testid="user-message-editor"]' ? editor : sel === '[id^="response-"]' ? responseEl : null);
+
+  turns.observe(() => {});
+  listeners.get('click')({ target: cancelBtn });
+  listeners.get('click')({ target: saveBtn });
+  listeners.get('keydown')({ target: editor, key: 'Enter', shiftKey: false, isComposing: false });
+  assert.equal(turns.known.length, 3);
+
+  saveDisabled = false;
+  listeners.get('keydown')({ target: editor, key: 'Enter', shiftKey: true, isComposing: false });
+  listeners.get('keydown')({ target: editor, key: 'Enter', shiftKey: false, isComposing: true });
+  assert.equal(turns.known.length, 3);
+
+  listeners.get('click')({ target: saveBtn });
+  assert.equal(turns.known.length, 1);
+  assert.equal(turns.known[0].hostTurnId, 'response-1');
+
+  turns.known = [{ hostTurnId: 'response-1' }, { hostTurnId: 'response-2' }, { hostTurnId: 'response-3' }];
+  listeners.get('keydown')({ target: editor, key: 'Enter', shiftKey: false, isComposing: false });
+  assert.equal(turns.known.length, 1);
+  assert.equal(turns.known[0].hostTurnId, 'response-1');
+
+  // Switching Grok history version (< 2 / 2 >) clears that branch immediately without affecting unrelated groups.
+  turns.known = [{ hostTurnId: 'response-1' }, { hostTurnId: 'response-2' }, { hostTurnId: 'response-3' }];
+  const prevBtn = new Element(null, false);
+  const nextBtn = new Element(null, false);
+  const versionGroup = { children: [prevBtn, { textContent: '2 / 2' }, nextBtn] };
+  for (const btn of [prevBtn, nextBtn]) {
+    btn.matches = () => false;
+    btn.getAttribute = () => null;
+    btn.closest = (sel) => (sel === 'button' ? btn : sel === '[role="group"]' ? versionGroup : sel === '[id^="response-"]' ? responseEl : null);
+  }
+  const unrelatedBtn = new Element(null, false);
+  unrelatedBtn.matches = () => false;
+  unrelatedBtn.getAttribute = () => null;
+  const otherGroup = { children: [unrelatedBtn, { textContent: 'Share' }, new Element()] };
+  unrelatedBtn.closest = (sel) => (sel === 'button' ? unrelatedBtn : sel === '[role="group"]' ? otherGroup : sel === '[id^="response-"]' ? responseEl : null);
+  listeners.get('click')({ target: unrelatedBtn });
+  assert.equal(turns.known.length, 3);
+  listeners.get('click')({ target: prevBtn });
+  assert.equal(turns.known.length, 1);
+  assert.equal(turns.known[0].hostTurnId, 'response-1');
+
+  turns.stop();
+  assert.equal(listeners.has('click'), false);
+  assert.equal(listeners.has('keydown'), false);
+});

@@ -1,3 +1,4 @@
+/* Modified for Voyager Lite on 2026-11-22. See UPSTREAM.md for provenance and changes. */
 import { watchRouteChanges } from '@/pages/content/utils/routeWatcher';
 
 import type { TimelineEngine } from './TimelineEngine';
@@ -15,6 +16,8 @@ export interface RouteTimelineOptions {
   readonly settleMs?: number;
   /** Forward `hashchange` to the engine, so a same-route `#gv-turn-…` link navigates the rail. */
   readonly followHash?: boolean;
+  /** Normalizes `location.href` into the identity that owns one TimelineEngine instance. */
+  routeKey?(href: string): string;
   /** False when the owning extension instance has been reloaded or removed. */
   readonly isAlive?: () => boolean;
 }
@@ -35,6 +38,7 @@ const routeOf = (href: string): string => href.split('#')[0];
  */
 export function runRouteTimeline(options: RouteTimelineOptions): RouteTimeline {
   const isConversation = options.isConversationRoute ?? (() => true);
+  const keyOf = options.routeKey ?? routeOf;
   const start =
     options.start ??
     ((engine: TimelineEngine) => {
@@ -45,7 +49,7 @@ export function runRouteTimeline(options: RouteTimelineOptions): RouteTimeline {
   let engine: TimelineEngine | null = null;
   let stopped = false;
   let lastHref = location.href;
-  let route = routeOf(lastHref);
+  let route = keyOf(lastHref);
   let settleTimer: number | null = null;
 
   const clearSettleTimer = (): void => {
@@ -82,7 +86,7 @@ export function runRouteTimeline(options: RouteTimelineOptions): RouteTimeline {
     if (href === lastHref) return;
     const previousUrl = lastHref;
     lastHref = href;
-    const next = routeOf(href);
+    const next = keyOf(href);
     if (next === route) return;
     route = next;
     clearSettleTimer();

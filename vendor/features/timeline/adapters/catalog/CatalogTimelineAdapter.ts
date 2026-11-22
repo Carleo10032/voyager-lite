@@ -131,6 +131,11 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
     this.detachListeners();
     if (this.config.siteId === 'chatgpt') document.addEventListener('submit', this.onEditSubmit, true);
     if (this.config.siteId === 'claude') document.addEventListener('click', this.onClaudeEditClick, true);
+    if (this.config.siteId === 'gemini') document.addEventListener('click', this.onGeminiEditClick, true);
+    if (this.config.siteId === 'grok') {
+      document.addEventListener('click', this.onGrokEditClick, true);
+      document.addEventListener('keydown', this.onGrokEditKeydown, true);
+    }
     const observer = new MutationObserver((records, owner) => {
       if (this.shouldRefresh(records)) callback(records, owner);
     });
@@ -154,6 +159,7 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
     return observer;
   }
   private known: Marker[] = [];
+  private lastGrokRid: string | null | undefined = undefined;
   private onMirrorUpdated: (() => void) | null = null;
   private readonly onThreadMessage = (event: MessageEvent): void => {
     if (event.source !== window || event.origin !== location.origin) return;
@@ -162,11 +168,80 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
   private detachListeners(): void {
     document.removeEventListener('submit', this.onEditSubmit, true);
     document.removeEventListener('click', this.onClaudeEditClick, true);
+    document.removeEventListener('click', this.onGeminiEditClick, true);
+    document.removeEventListener('click', this.onGrokEditClick, true);
+    document.removeEventListener('keydown', this.onGrokEditKeydown, true);
     if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
       window.removeEventListener('message', this.onThreadMessage);
     }
     this.onMirrorUpdated = null;
   }
+  private truncateBranch(siteId: string, element: HTMLElement): void {
+    const id = hostTurnId(siteId, element);
+    const index = this.known.findIndex((marker) => marker.hostTurnId === id);
+    if (id && index >= 0) this.known = this.known.slice(0, index);
+  }
+  private readonly onGeminiEditClick = (event: Event): void => {
+    if (!(event.target instanceof Element)) return;
+    const button = event.target.closest('button');
+    if (
+      !button ||
+      button.hasAttribute('disabled') ||
+      button.getAttribute('aria-disabled') === 'true'
+    ) {
+      return;
+    }
+    const updateHost = button.closest('.update-button');
+    if (!updateHost || updateHost.classList?.contains('gem-button-disabled')) return;
+    this.truncateBranch('gemini', button as HTMLElement);
+  };
+  private isGrokVersionButton(button: Element): boolean {
+    const group = button.closest('[role="group"]');
+    if (!group || !group.children || group.children.length !== 3) return false;
+    const [prev, counter, next] = Array.from(group.children);
+    if (button !== prev && button !== next) return false;
+    return /^\s*\d+\s*\/\s*\d+\s*$/.test(counter?.textContent ?? '');
+  }
+  private readonly onGrokEditClick = (event: Event): void => {
+    if (!(event.target instanceof Element)) return;
+    const button = event.target.closest('button');
+    if (
+      !button ||
+      button.hasAttribute('disabled') ||
+      button.getAttribute('aria-disabled') === 'true'
+    ) {
+      return;
+    }
+    if (
+      !button.matches('[data-testid="user-message-editor-save"]') &&
+      !this.isGrokVersionButton(button)
+    ) {
+      return;
+    }
+    this.truncateBranch('grok', button as HTMLElement);
+  };
+  private readonly onGrokEditKeydown = (event: Event): void => {
+    const keyEvent = event as KeyboardEvent;
+    if (
+      keyEvent.key !== 'Enter' ||
+      keyEvent.shiftKey ||
+      keyEvent.ctrlKey ||
+      keyEvent.altKey ||
+      keyEvent.metaKey ||
+      keyEvent.isComposing
+    ) {
+      return;
+    }
+    if (!(event.target instanceof Element)) return;
+    const editor = event.target.closest('[data-testid="user-message-editor"]');
+    if (!editor) return;
+    const response = editor.closest('[id^="response-"]');
+    const save = response?.querySelector?.('[data-testid="user-message-editor-save"]');
+    if (save && (save.hasAttribute('disabled') || save.getAttribute('aria-disabled') === 'true')) {
+      return;
+    }
+    this.truncateBranch('grok', editor as HTMLElement);
+  };
   private readonly onClaudeEditClick = (event: Event): void => {
     if (!(event.target instanceof Element)) return;
     const button = event.target.closest('button');
@@ -316,7 +391,54 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
       const rect = element.getBoundingClientRect();
       return scrollTop + rect.top - viewportTop + rect.height / 2;
     };
-    this.known = mergeMountedTurns(rememberedMarkers(this.known, mounted), mounted, centerOf);
+    let grokRidChanged = false;
+    if (this.config.siteId === 'grok' && typeof location !== 'undefined') {
+      let currentRid: string | null = null;
+      try {
+        currentRid = new URL(location.href).searchParams.get('rid');
+      } catch {
+        currentRid = null;
+      }
+      if (this.lastGrokRid !== undefined && currentRid !== this.lastGrokRid) {
+        grokRidChanged = true;
+      }
+      this.lastGrokRid = currentRid;
+    }
+    const viewportHeight =
+      viewport === document.documentElement || viewport === document.body
+        ? window.innerHeight
+        : viewport.clientHeight;
+    const scrollHeight = viewport.scrollHeight;
+    const hasVisibleMounted =
+      this.config.siteId === 'grok' &&
+      mounted.some((turn) => {
+        const c = centerOf(turn.element);
+        return c >= scrollTop && c <= scrollTop + viewportHeight;
+      });
+    const shouldPruneDisconnected =
+      this.config.siteId === 'grok' && mounted.length > 0 && hasVisibleMounted
+        ? (marker: Marker): boolean => {
+            if (
+              marker.hostTurnId &&
+              typeof document.getElementById === 'function' &&
+              document.getElementById(marker.hostTurnId)
+            ) {
+              return false;
+            }
+            return (
+              (marker.center >= scrollTop && marker.center <= scrollTop + viewportHeight) ||
+              (scrollHeight > 0 && marker.center > scrollHeight)
+            );
+          }
+        : undefined;
+    const pruneDisconnected =
+      this.config.siteId === 'gemini' ||
+      ((anchors.length > 0 || grokRidChanged) && mounted.length > 0);
+    this.known = mergeMountedTurns(
+      rememberedMarkers(this.known, mounted, { pruneDisconnected, shouldPruneDisconnected }),
+      mounted,
+      centerOf,
+    );
     const pass =
       this.known.reduce((latest, marker) => Math.max(latest, marker.measuredAt ?? 0), 0) + 1;
     for (const marker of this.known) {
@@ -403,5 +525,6 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
     }
     this.originalStamps.clear();
     this.known = [];
+    this.lastGrokRid = undefined;
   }
 }

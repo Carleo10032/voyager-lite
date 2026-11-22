@@ -339,6 +339,14 @@ test('TimelineView places left rail 15px inside chat scroller, tracks sidebar re
   boundsObserver.trigger();
   assert.equal(bar.style.left, '87px');
 
+  // If viewport temporarily falls back to documentElement, zero-width, or zero-height during a branch switch / teardown, keep lastKnownChatLeft instead of jumping to 15px.
+  scroller._rect = { left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 };
+  view.syncRailPlacement();
+  assert.equal(bar.style.left, '87px', 'transient zero-width bounds must not snap left rail into host sidebar');
+  scroller._rect = { left: 0, right: 1440, top: 0, bottom: 0, width: 1440, height: 0 };
+  view.syncRailPlacement();
+  assert.equal(bar.style.left, '87px', 'collapsing zero-height container with left=0 must not snap left rail into host sidebar');
+
   // Switch back to right side: clears inline left/right and stops observing scroller.
   view.setRailPosition('right');
   assert.equal(bar.style.left, '');
@@ -346,4 +354,23 @@ test('TimelineView places left rail 15px inside chat scroller, tracks sidebar re
   assert.equal(bar.classList.contains('gv-timeline-ruler-inward-right'), false);
   assert.equal(boundsObserver.targets.size, 0);
   view.destroy();
+
+  // A freshly rebuilt TimelineView (e.g. after deleting a Gemini chat and routing to /app) inherits lastKnownChatLeft instead of flashing at 15px.
+  const rebuilt = new env.TimelineView(
+    { markers: [], toggleStar() {} },
+    geometry,
+    {
+      mountAnchor: env.document.body,
+      position: 'left',
+      getViewport: () => env.document.documentElement,
+      getActiveId: () => null,
+      navigate() {},
+      search() {},
+      onStyleChange() {},
+      onResize() {},
+    },
+  );
+  rebuilt.mount();
+  assert.equal(rebuilt.ui.timelineBar.style.left, '87px', 'rebuilt left rail inherits lastKnownChatLeft across route transitions');
+  rebuilt.destroy();
 });
