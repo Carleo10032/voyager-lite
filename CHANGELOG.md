@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.1.1 — 2026-11-22
+
+- Lower timeline UI (`36`–`39`) and background visual effects (`35`) z-index layers from near-`INT_MAX` so image lightboxes, modals, popovers, and overlay drawers stay cleanly above the timeline and snow/sakura/rain effects across Gemini, ChatGPT, Claude, and Grok while keeping timeline controls above chat content, composers, and headers.
+
 ## 3.1.0 — 2026-11-21
 
 - Add a timeline position setting (`左侧` / `右侧`, supporting Global + per-platform scopes with mixed-state detection) that mirrors the rail, Dots / Ruler / Compact ticks, hover preview cards, compact preview panel, and hover bridge with identical spacing (`15px` from the chat area edge, `12px` preview gap), automatically tracking collapsible left sidebars across all four platforms.

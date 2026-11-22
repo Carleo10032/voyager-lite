@@ -18,7 +18,7 @@
     color 0.15s ease,
     background-color 0.15s ease,
     opacity 0.15s ease;
-  z-index: 2147483646;
+  z-index: 38;
   opacity: 1;
 }
 
@@ -54,7 +54,7 @@
   border: 1px solid var(--timeline-tooltip-border);
   border-radius: var(--timeline-tooltip-radius);
   box-shadow: var(--timeline-tooltip-shadow);
-  z-index: 2147483645;
+  z-index: 37;
   display: flex;
   flex-direction: column;
   opacity: 0;
@@ -82,7 +82,7 @@
 
 .gv-timeline-preview-hover-bridge {
   position: fixed;
-  z-index: 2147483645;
+  z-index: 37;
   pointer-events: none;
   background: transparent;
 }

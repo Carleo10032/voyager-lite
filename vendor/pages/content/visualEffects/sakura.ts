@@ -1,3 +1,4 @@
+/* Modified for Voyager Lite on 2026-11-22. See UPSTREAM.md for provenance and changes. */
 /**
  * Sakura (Cherry Blossom) effect for Gemini.
  *
@@ -54,7 +55,7 @@ function createEffectCanvas(): HTMLCanvasElement {
   nextCanvas.id = CANVAS_ID;
   nextCanvas.dataset.gvSakuraRenderer = 'main-thread';
   nextCanvas.style.cssText =
-    'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483647;';
+    'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:35;';
   document.documentElement.appendChild(nextCanvas);
   return nextCanvas;
 }
@@ -286,7 +287,7 @@ function tryStartFirefoxWorkerFrame(): boolean {
     frame.setAttribute('aria-hidden', 'true');
     frame.setAttribute('tabindex', '-1');
     frame.style.cssText =
-      'position:fixed;inset:0;width:100%;height:100%;border:0;pointer-events:none;background:transparent;z-index:2147483647;';
+      'position:fixed;inset:0;width:100%;height:100%;border:0;pointer-events:none;background:transparent;z-index:35;';
     frame.src = `${chrome.runtime.getURL(RENDERER_PAGE_PATH)}#${encodeURIComponent(channelId)}`;
 
     rendererMode = 'worker-frame';

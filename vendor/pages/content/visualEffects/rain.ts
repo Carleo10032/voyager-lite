@@ -1,3 +1,4 @@
+/* Modified for Voyager Lite on 2026-11-22. See UPSTREAM.md for provenance and changes. */
 /**
  * Rain Effect for Gemini — inspired by "The Garden of Words"
  *
@@ -269,7 +270,7 @@ function enable(): void {
   canvas = document.createElement('canvas');
   canvas.id = CANVAS_ID;
   canvas.style.cssText =
-    'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483647;';
+    'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:35;';
   document.documentElement.appendChild(canvas);
 
   ctx = canvas.getContext('2d');

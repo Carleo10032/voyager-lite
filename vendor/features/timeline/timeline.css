@@ -14,7 +14,7 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
   width: 24px;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 128px);
   height: auto;
-  z-index: 2147483646;
+  z-index: 38;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -310,7 +310,7 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
   border-radius: 8px;
   box-shadow: var(--timeline-tooltip-shadow);
   padding: 4px 0;
-  z-index: 2147483647;
+  z-index: 39;
   min-width: 160px;
   animation: timeline-menu-in 0.12s ease-out;
 }
@@ -490,7 +490,7 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
   );
   box-shadow: var(--timeline-tooltip-shadow);
   pointer-events: none;
-  z-index: 2147483647;
+  z-index: 39;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   line-clamp: 3;
@@ -622,7 +622,7 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
   height: 160px;
   opacity: 0;
   transition: opacity 180ms ease;
-  z-index: 2147483646;
+  z-index: 38;
   pointer-events: none;
 }
 
@@ -757,7 +757,7 @@ html[data-gv-scheme='dark'] .gemini-timeline-bar.gv-timeline-style-dots {
 /* Opaque transition veil covering only the chat scroller during distant/unmounted jumps. */
 .gv-navigation-veil {
   position: fixed;
-  z-index: 2147483640;
+  z-index: 36;
   pointer-events: none;
   user-select: none;
   display: flex;
