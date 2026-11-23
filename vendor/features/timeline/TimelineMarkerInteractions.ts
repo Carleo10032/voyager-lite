@@ -220,7 +220,8 @@ export class TimelineMarkerInteractions {
     }
 
     menu.addEventListener('click', this.onMenuClick);
-    document.body.appendChild(menu);
+    const anchor = this.bar.parentElement?.isConnected ? this.bar.parentElement : document.body;
+    anchor.appendChild(menu);
     this.menu = { element: menu, turnId };
     const width = menu.offsetWidth;
     const height = menu.offsetHeight;

@@ -58,9 +58,16 @@ export class TimelinePreviewPanel {
 
   constructor(
     private readonly anchorElement: HTMLElement,
-    private readonly mountAnchor: HTMLElement = document.body,
+    private mountAnchor: HTMLElement = document.body,
     private railPosition?: 'left' | 'right',
   ) {}
+
+  setMountAnchor(anchor: HTMLElement): void {
+    this.mountAnchor = anchor;
+    for (const el of [this.toggleBtn, this.panelEl, this.hoverBridgeEl]) {
+      if (el && el.parentElement !== anchor) anchor.appendChild(el);
+    }
+  }
 
   setRailPosition(position: 'left' | 'right'): void {
     this.railPosition = position;

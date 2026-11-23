@@ -41,7 +41,8 @@ test('switching a Claude message version clears only that branch', () => {
   const turns = new CatalogTimelineAdapter({ siteId: 'claude', position: 'right' }, {}).turns;
   turns.known = [{ hostTurnId: 'first' }, { hostTurnId: 'edited' }, { hostTurnId: 'later' }];
   const button = new Element();
-  button.matches = () => true;
+  button.getAttribute = () => null;
+  button.matches = (sel) => sel.includes('user-message-previous-version');
   button.closest = (selector) => selector === 'button' ? button : selector === '[data-turn-key]' ? { getAttribute: () => 'edited' } : null;
   turns.observe(() => {});
   listeners.get('click')({ target: button });
@@ -55,7 +56,9 @@ test('saving a Claude edit removes its old branch while cancel and disabled save
   turns.known = [{ hostTurnId: 'first' }, { hostTurnId: 'edited' }, { hostTurnId: 'later' }];
   const editor = { getAttribute: () => 'edited', querySelectorAll: () => [cancel, save] };
   const cancel = new Element(editor);
+  cancel.getAttribute = () => null;
   const save = new Element(editor, true);
+  save.getAttribute = () => null;
   turns.observe(() => {});
   listeners.get('click')({ target: cancel });
   listeners.get('click')({ target: save });
@@ -64,8 +67,36 @@ test('saving a Claude edit removes its old branch while cancel and disabled save
   listeners.get('click')({ target: save });
   assert.equal(turns.known.length, 1);
   assert.equal(turns.known[0].hostTurnId, 'first');
+
+  // Pressing Enter in Claude's edit box also clears the old branch while Shift+Enter, IME, and disabled Save leave it intact.
+  turns.known = [{ hostTurnId: 'first' }, { hostTurnId: 'edited' }, { hostTurnId: 'later' }];
+  const textarea = new Element(editor);
+  textarea.closest = (selector) => (selector === '[data-testid="message-edit-box"]' ? editor : null);
+  save.disabled = true;
+  listeners.get('keydown')({ target: textarea, key: 'Enter', shiftKey: false, altKey: false, isComposing: false });
+  assert.equal(turns.known.length, 3);
+  save.disabled = false;
+  listeners.get('keydown')({ target: textarea, key: 'Enter', shiftKey: true, altKey: false, isComposing: false });
+  listeners.get('keydown')({ target: textarea, key: 'Enter', shiftKey: false, altKey: false, isComposing: true });
+  assert.equal(turns.known.length, 3);
+  listeners.get('keydown')({ target: textarea, key: 'Enter', shiftKey: false, altKey: false, isComposing: false });
+  assert.equal(turns.known.length, 1);
+  assert.equal(turns.known[0].hostTurnId, 'first');
+
+  // Clicking user-message-retry keeps the retried turn and discards downstream turns.
+  turns.known = [{ hostTurnId: 'first' }, { hostTurnId: 'edited' }, { hostTurnId: 'later' }];
+  const retry = new Element();
+  retry.getAttribute = () => null;
+  retry.matches = (sel) => sel === '[data-testid="user-message-retry"]';
+  retry.closest = (selector) =>
+    selector === 'button' ? retry : selector === '[data-turn-key]' ? { getAttribute: () => 'edited' } : null;
+  listeners.get('click')({ target: retry });
+  assert.equal(turns.known.length, 2);
+  assert.deepEqual(turns.known.map((m) => m.hostTurnId), ['first', 'edited']);
+
   turns.stop();
   assert.equal(listeners.has('click'), false);
+  assert.equal(listeners.has('keydown'), false);
 });
 
 test('updating a Gemini edit removes its old branch while cancel and disabled update leave it intact', () => {

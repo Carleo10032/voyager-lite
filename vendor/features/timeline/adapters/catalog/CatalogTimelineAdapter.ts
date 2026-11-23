@@ -27,7 +27,13 @@ export class CatalogTimelineAdapter implements TimelineAdapter {
     private readonly sendTimes: CatalogSendTimestamps | null = null,
   ) {
     this.route = { siteId: config.siteId, url: location.href.split('#')[0] };
-    this.mount = { anchor: () => document.body, position: config.position };
+    this.mount = {
+      anchor: () =>
+        (config.mountAnchorSelector && typeof document.querySelector === 'function'
+          ? document.querySelector<HTMLElement>(config.mountAnchorSelector)
+          : null) ?? document.body,
+      position: config.position,
+    };
     this.storage = createCatalogTimelineStoragePolicy(config, ownership, this.route.url);
     this.turns = new CatalogTimelineTurnSource(config, ownership);
   }
@@ -130,7 +136,10 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
   observe(callback: MutationCallback): MutationObserver {
     this.detachListeners();
     if (this.config.siteId === 'chatgpt') document.addEventListener('submit', this.onEditSubmit, true);
-    if (this.config.siteId === 'claude') document.addEventListener('click', this.onClaudeEditClick, true);
+    if (this.config.siteId === 'claude') {
+      document.addEventListener('click', this.onClaudeEditClick, true);
+      document.addEventListener('keydown', this.onClaudeEditKeydown, true);
+    }
     if (this.config.siteId === 'gemini') document.addEventListener('click', this.onGeminiEditClick, true);
     if (this.config.siteId === 'grok') {
       document.addEventListener('click', this.onGrokEditClick, true);
@@ -168,6 +177,7 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
   private detachListeners(): void {
     document.removeEventListener('submit', this.onEditSubmit, true);
     document.removeEventListener('click', this.onClaudeEditClick, true);
+    document.removeEventListener('keydown', this.onClaudeEditKeydown, true);
     document.removeEventListener('click', this.onGeminiEditClick, true);
     document.removeEventListener('click', this.onGrokEditClick, true);
     document.removeEventListener('keydown', this.onGrokEditKeydown, true);
@@ -245,18 +255,54 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
   private readonly onClaudeEditClick = (event: Event): void => {
     if (!(event.target instanceof Element)) return;
     const button = event.target.closest('button');
-    if (!button || button.hasAttribute('disabled')) return;
-    if (button.matches('[data-testid="user-message-previous-version"], [data-testid="user-message-next-version"]')) {
-      const id = hostTurnId('claude', button);
+    if (
+      !button ||
+      button.hasAttribute('disabled') ||
+      button.getAttribute('aria-disabled') === 'true'
+    ) {
+      return;
+    }
+    if (
+      button.matches(
+        '[data-testid="user-message-previous-version"], [data-testid="user-message-next-version"]',
+      )
+    ) {
+      this.truncateBranch('claude', button as HTMLElement);
+      return;
+    }
+    if (button.matches('[data-testid="user-message-retry"]')) {
+      const id = hostTurnId('claude', button as HTMLElement);
       const index = this.known.findIndex((marker) => marker.hostTurnId === id);
-      if (id && index >= 0) this.known = this.known.slice(0, index);
+      if (id && index >= 0) this.known = this.known.slice(0, index + 1);
       return;
     }
     const editor = button?.closest('[data-testid="message-edit-box"]');
     if (!editor) return;
     const buttons = editor.querySelectorAll('button[data-cds="Button"]');
     if (buttons.length < 2 || buttons[buttons.length - 1] !== button) return;
-    const id = editor.getAttribute('data-message-uuid');
+    const id = editor.getAttribute('data-message-uuid') || hostTurnId('claude', editor as HTMLElement);
+    const index = this.known.findIndex((marker) => marker.hostTurnId === id);
+    if (id && index >= 0) this.known = this.known.slice(0, index);
+  };
+  private readonly onClaudeEditKeydown = (event: Event): void => {
+    const keyEvent = event as KeyboardEvent;
+    if (
+      keyEvent.key !== 'Enter' ||
+      keyEvent.shiftKey ||
+      keyEvent.altKey ||
+      keyEvent.isComposing
+    ) {
+      return;
+    }
+    if (!(event.target instanceof Element)) return;
+    const editor = event.target.closest('[data-testid="message-edit-box"]');
+    if (!editor) return;
+    const buttons = editor.querySelectorAll?.('button[data-cds="Button"]');
+    const save = buttons && buttons.length >= 2 ? buttons[buttons.length - 1] : null;
+    if (save && (save.hasAttribute('disabled') || save.getAttribute('aria-disabled') === 'true')) {
+      return;
+    }
+    const id = editor.getAttribute('data-message-uuid') || hostTurnId('claude', editor as HTMLElement);
     const index = this.known.findIndex((marker) => marker.hostTurnId === id);
     if (id && index >= 0) this.known = this.known.slice(0, index);
   };
@@ -409,23 +455,65 @@ class CatalogTimelineTurnSource implements TimelineTurnSource {
         ? window.innerHeight
         : viewport.clientHeight;
     const scrollHeight = viewport.scrollHeight;
-    const hasVisibleMounted =
-      this.config.siteId === 'grok' &&
-      mounted.some((turn) => {
-        const c = centerOf(turn.element);
-        return c >= scrollTop && c <= scrollTop + viewportHeight;
-      });
+    const virtualizedPruneSite = this.config.siteId === 'grok' || this.config.siteId === 'claude';
+    const mountedBlocks: Array<[number, number]> = [];
+    let hasVisibleContent = false;
+    if (virtualizedPruneSite && mounted.length > 0) {
+      const intervals: Array<[number, number]> = [];
+      const addInterval = (el: HTMLElement): void => {
+        const r = el.getBoundingClientRect();
+        const top = scrollTop + r.top - viewportTop;
+        const bottom = scrollTop + r.bottom - viewportTop;
+        if (bottom >= scrollTop && top <= scrollTop + viewportHeight) hasVisibleContent = true;
+        intervals.push([top, bottom]);
+      };
+      for (const turn of mounted) addInterval(turn.element);
+      if (this.config.assistantTurnSelector && typeof scope.querySelectorAll === 'function') {
+        for (const reply of Array.from(
+          scope.querySelectorAll<HTMLElement>(this.config.assistantTurnSelector),
+        ).filter(isRendered)) {
+          addInterval(reply);
+        }
+      }
+      intervals.sort((a, b) => a[0] - b[0]);
+      // Merge adjacent mounted turns/replies (normal row gaps <= 80px) into contiguous windows
+      // without ever bridging across a virtualized off-screen hole (e.g. Claude's pinned tail turn).
+      for (const [top, bottom] of intervals) {
+        const last = mountedBlocks[mountedBlocks.length - 1];
+        if (last && top - last[1] <= 80) last[1] = Math.max(last[1], bottom);
+        else mountedBlocks.push([top, bottom]);
+      }
+    }
+    const openClaudeEditorIds =
+      this.config.siteId === 'claude' && typeof scope.querySelectorAll === 'function'
+        ? new Set(
+            Array.from(scope.querySelectorAll<HTMLElement>('[data-testid="message-edit-box"]'))
+              .map((el) => el.getAttribute('data-message-uuid'))
+              .filter((id): id is string => Boolean(id)),
+          )
+        : null;
     const shouldPruneDisconnected =
-      this.config.siteId === 'grok' && mounted.length > 0 && hasVisibleMounted
+      virtualizedPruneSite && mounted.length > 0 && hasVisibleContent
         ? (marker: Marker): boolean => {
-            if (
+            if (this.config.siteId === 'grok') {
+              if (
+                marker.hostTurnId &&
+                typeof document.getElementById === 'function' &&
+                document.getElementById(marker.hostTurnId)
+              ) {
+                return false;
+              }
+            } else if (
+              this.config.siteId === 'claude' &&
               marker.hostTurnId &&
-              typeof document.getElementById === 'function' &&
-              document.getElementById(marker.hostTurnId)
+              openClaudeEditorIds?.has(marker.hostTurnId)
             ) {
               return false;
             }
             return (
+              mountedBlocks.some(
+                ([top, bottom]) => marker.center >= top && marker.center <= bottom,
+              ) ||
               (marker.center >= scrollTop && marker.center <= scrollTop + viewportHeight) ||
               (scrollHeight > 0 && marker.center > scrollHeight)
             );

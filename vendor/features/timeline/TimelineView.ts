@@ -27,6 +27,7 @@ const TIMELINE_PAGE_NODES = [
 ].join(',');
 interface TimelineViewOptions {
   mountAnchor?: HTMLElement;
+  getMountAnchor?: () => HTMLElement;
   storagePrefix?: string;
   position?: 'left' | 'right';
   getViewport: () => HTMLElement | null;
@@ -56,6 +57,24 @@ export class TimelineView {
   private veilRemoveTimer: number | null = null;
   private boundsResizeObserver: ResizeObserver | null = null;
   private observedBoundsEl: HTMLElement | null = null;
+
+  resolveMountAnchor(): HTMLElement {
+    const candidate = this.options.getMountAnchor?.() ?? this.options.mountAnchor;
+    return candidate?.isConnected ? candidate : document.body;
+  }
+
+  syncMountAnchor(): HTMLElement {
+    const anchor = this.resolveMountAnchor();
+    if (this.destroyed) return anchor;
+    const reparent = (el: HTMLElement | null | undefined): void => {
+      if (el && el.parentElement !== anchor) anchor.appendChild(el);
+    };
+    reparent(this.ui.timelineBar);
+    reparent(this.ui.slider);
+    reparent(this.navigationVeil);
+    this.previewPanel?.setMountAnchor(anchor);
+    return anchor;
+  }
 
   setNavigationCurtain(active: boolean): void {
     if (this.veilRemoveTimer !== null) {
@@ -95,8 +114,11 @@ export class TimelineView {
       const spinner = document.createElement('span');
       spinner.className = 'gv-navigation-veil-spinner';
       veil.appendChild(spinner);
-      (this.options.mountAnchor ?? document.body).append(veil);
+      this.resolveMountAnchor().append(veil);
       this.navigationVeil = veil;
+    } else {
+      const anchor = this.resolveMountAnchor();
+      if (veil.parentElement !== anchor) anchor.append(veil);
     }
     veil.classList.remove('gv-navigation-veil-hiding');
     veil.style.top = `${Math.max(0, Math.round(rect.top))}px`;
@@ -185,6 +207,7 @@ export class TimelineView {
   syncRailPlacement(): void {
     const bar = this.ui.timelineBar;
     if (!bar || this.destroyed) return;
+    this.syncMountAnchor();
     bar.dataset.gvPosition = this.railPosition;
     if (this.railPosition === 'left') {
       const boundsEl = this.resolveChatBoundsElement();
@@ -343,7 +366,7 @@ export class TimelineView {
     this.styleElement.dataset.gvTimeline = '';
     this.styleElement.textContent = `${timelineStyles}\n${previewStyles}`;
     document.head.appendChild(this.styleElement);
-    const anchor = this.options.mountAnchor ?? document.body;
+    const anchor = this.resolveMountAnchor();
     const bar = document.createElement('div');
     bar.className = 'gemini-timeline-bar';
     anchor.appendChild(bar);

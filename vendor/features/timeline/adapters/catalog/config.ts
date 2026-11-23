@@ -11,6 +11,7 @@ export interface CatalogTimelineConfig {
   readonly turnItemSelector?: string;
   readonly scrollContainerSelector?: string;
   readonly activePageSelector?: string;
+  readonly mountAnchorSelector?: string;
   readonly threadMirror?: boolean;
   readonly yieldWhenSelector?: string;
   readonly position: 'left' | 'right';

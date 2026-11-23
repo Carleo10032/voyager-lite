@@ -92,7 +92,7 @@ export class TimelineEngine {
       onStyleChange: () => this.tooltip?.hide(true),
       onResize: () => this.tooltip?.refreshCurrent(),
       storagePrefix: adapter.storage.settingsPrefix,
-      mountAnchor: adapter.mount.anchor(),
+      getMountAnchor: () => adapter.mount.anchor(),
       position: adapter.mount.position === 'auto' ? undefined : adapter.mount.position,
     });
     this.timestamps = adapter.timestamps(this.state);
@@ -182,6 +182,8 @@ export class TimelineEngine {
   }
   private onStateChange(): void {
     if (this.destroyed) return;
+    this.view.syncMountAnchor();
+    this.tooltip?.syncMountAnchor();
     // Syncing to the chat here would reset the user's manually scrolled rail after marker edits.
     this.view.updateTimelineGeometry();
     this.view.updateVirtualRangeAndRender();

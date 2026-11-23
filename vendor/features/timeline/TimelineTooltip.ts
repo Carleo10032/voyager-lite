@@ -38,7 +38,8 @@ export class TimelineTooltip {
     tip.id = 'gemini-timeline-tooltip';
     tip.setAttribute('role', 'tooltip');
     tip.setAttribute('dir', 'auto');
-    document.body.appendChild(tip);
+    const anchor = this.bar.parentElement?.isConnected ? this.bar.parentElement : document.body;
+    anchor.appendChild(tip);
     this.element = tip;
 
     const measure = document.createElement('div');
@@ -66,8 +67,14 @@ export class TimelineTooltip {
       maxWidth: 'none',
       display: 'block',
     });
-    document.body.appendChild(measure);
+    anchor.appendChild(measure);
     this.measureEl = measure;
+  }
+
+  syncMountAnchor(): void {
+    const anchor = this.bar.parentElement?.isConnected ? this.bar.parentElement : document.body;
+    if (this.element && this.element.parentElement !== anchor) anchor.appendChild(this.element);
+    if (this.measureEl && this.measureEl.parentElement !== anchor) anchor.appendChild(this.measureEl);
   }
 
   refreshCurrent(): void {
@@ -205,6 +212,7 @@ export class TimelineTooltip {
   show(dot: DotElement): void {
     if (!this.element) return;
     if (this.options.getContext().previewOpen) return;
+    this.syncMountAnchor();
     this.cancelPending();
     if (this.tooltipHideTimer) {
       clearTimeout(this.tooltipHideTimer);

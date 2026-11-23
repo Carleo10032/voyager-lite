@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.1.3 — 2026-11-23
+
+- Fix every newly sent Grok turn duplicating twice on the timeline when Grok commits an optimistic message by mutating its ancestor `div#response-<temp>` `id` in-place to `div#response-<server>` on the same connected DOM element: match in-place `hostTurnId` upgrades by live DOM element in `turnMerge.ts` (`matchKnownMarkers` / `rememberedMarkers`) while ensuring stale markers never remain attached to an element owned by a different `hostTurnId`, preserving the original marker ID across Grok and any other host performing in-place ID replacement.
+- Fix Grok's left-side timeline rail floating above Grok's sidebar `...` context menus and Base-UI dropdown popovers: Grok wraps both `#grok-app-root` and its sibling Base-UI portal host inside an `isolation: isolate` container, so configure `mountAnchorSelector: '#grok-app-root'` for Grok and dynamically sync all timeline surfaces (rail, slider, preview panel/toggle/bridge, navigation veil, tooltip, and context menu) into the resolved mount anchor so they stay above Grok's chat area/headers while remaining strictly below Grok's dropdown menus, popovers, and modals.
+- Fix Claude prompt editing leaving duplicate/extra timeline markers (especially when submitting edits via Enter, retrying a turn, or when the edited user bubble scrolls just above the viewport inside a long reply): configure `scrollContainerSelector: '[data-autoscroll-container="true"]'` for Claude, add `onClaudeEditKeydown` (Enter submission in `[data-testid="message-edit-box"]`) and `[data-testid="user-message-retry"]` handling, and extend contiguous mounted-window + visible-content disconnected-turn pruning to both Claude and Grok while preserving open inline editors (`[data-testid="message-edit-box"][data-message-uuid]` / `#response-*`) and virtualized turns between sparse windows (such as Claude's pinned tail turn).
+
 ## 3.1.2 — 2026-11-22
 
 - Fix Gemini prompt editing leaving duplicate timeline markers and a dead trailing marker by truncating the edited branch on Gemini's `.update-button` click and pruning disconnected committed markers against Gemini's authoritative mounted DOM (and ChatGPT's active `threadMirror` anchor list) while preserving in-place edit/cancel state and `<pending-request>` adoption.

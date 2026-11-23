@@ -110,18 +110,33 @@ function matchKnownMarkers(known: readonly Marker[], mounted: readonly MountedEn
   const firstByHash = new Map<string, number>();
   const indexById = new Map<string, number>();
   const indexByHostId = new Map<string, number>();
+  const indexByElement = new Map<HTMLElement, number>();
+  const mountedHostIds = new Set(
+    mounted.map((entry) => entry.hostTurnId).filter((id): id is string => Boolean(id)),
+  );
   known.forEach((marker, index) => {
     hashCount.set(marker.hash, (hashCount.get(marker.hash) ?? 0) + 1);
     if (!firstByHash.has(marker.hash)) firstByHash.set(marker.hash, index);
     indexById.set(marker.id, index);
     if (marker.hostTurnId) indexByHostId.set(marker.hostTurnId, index);
+    indexByElement.set(marker.element, index);
   });
 
   const certainMatch = (entry: MountedEntry, from: number): number => {
     if (entry.hostTurnId) {
       const index = indexByHostId.get(entry.hostTurnId);
       if (index !== undefined) return index >= from ? index : -1;
-      // An optimistic turn may have been stamped in-place before the host assigned its native id.
+      // An optimistic turn may have its native id assigned or replaced in-place on the same DOM
+      // element (e.g. Grok upgrading response-<temp> -> response-<server> on commit).
+      const byElement = indexByElement.get(entry.element);
+      if (
+        byElement !== undefined &&
+        byElement >= from &&
+        known[byElement].hash === entry.hash &&
+        (!known[byElement].hostTurnId || !mountedHostIds.has(known[byElement].hostTurnId!))
+      ) {
+        return byElement;
+      }
       const stamped = entry.element.getAttribute(TURN_ID_ATTR);
       const byStamp = stamped === null ? undefined : indexById.get(stamped);
       if (
@@ -449,21 +464,43 @@ export function rememberedMarkers(
     readonly shouldPruneDisconnected?: (marker: Marker) => boolean;
   },
 ): Marker[] {
-  const current = new Map(mounted.map((turn) => [turn.element, hashString(turn.summary)]));
+  const current = new Map(
+    mounted.map((turn) => [
+      turn.element,
+      { hash: hashString(turn.summary), hostTurnId: turn.hostTurnId },
+    ]),
+  );
   const mountedHostIds = new Set(
     mounted.map((turn) => turn.hostTurnId).filter((id): id is string => Boolean(id)),
   );
+  const knownHostIds = new Set(
+    known.map((marker) => marker.hostTurnId).filter((id): id is string => Boolean(id)),
+  );
   const shouldPrune = options?.shouldPruneDisconnected;
   const keepAllDisconnected = !options?.pruneDisconnected && !shouldPrune;
-  return known.filter(
-    (marker) =>
-      (!marker.element.isConnected &&
-        (Boolean(marker.pending) ||
-          keepAllDisconnected ||
-          (!options?.pruneDisconnected && !shouldPrune?.(marker)))) ||
-      current.get(marker.element) === marker.hash ||
-      (!!marker.hostTurnId && mountedHostIds.has(marker.hostTurnId)),
-  );
+  return known.filter((marker) => {
+    if (!marker.element.isConnected) {
+      return (
+        Boolean(marker.pending) ||
+        keepAllDisconnected ||
+        (!options?.pruneDisconnected && !shouldPrune?.(marker)) ||
+        (!!marker.hostTurnId && mountedHostIds.has(marker.hostTurnId))
+      );
+    }
+    const mountedTurn = current.get(marker.element);
+    if (mountedTurn && mountedTurn.hash === marker.hash) {
+      if (canMatchHostId(marker.hostTurnId, mountedTurn.hostTurnId)) return true;
+      // Same live DOM element upgraded its hostTurnId in-place (e.g. optimistic -> committed id).
+      if (
+        mountedTurn.hostTurnId &&
+        !knownHostIds.has(mountedTurn.hostTurnId) &&
+        !mountedHostIds.has(marker.hostTurnId!)
+      ) {
+        return true;
+      }
+    }
+    return !!marker.hostTurnId && mountedHostIds.has(marker.hostTurnId);
+  });
 }
 
 export function mergeMountedTurns(

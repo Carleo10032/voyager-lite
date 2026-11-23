@@ -523,3 +523,257 @@ test('Grok prunes disconnected visible/past-end replaced turns (e.g. after Stop)
  assert.equal(snap.markers.length,3,'open editor whose response container stays connected must keep its marker');
  assert.deepEqual(Array.from(snap.markers,m=>m.hostTurnId),['response-0','response-1','response-final']);
 });
+
+test('in-place hostTurnId replacement on the same connected DOM element upgrades without duplicating',()=>{
+ const first=turn('response-1','你好？',100);
+ const optimistic=turn('response-temp-2','你好？',300);
+ let known=merge([],[first,optimistic]);
+ assert.equal(known.length,2);
+ const firstId=known[0].id;
+ const optimisticId=known[1].id;
+ assert.notEqual(firstId,optimisticId);
+
+ // Grok mutates the ancestor div#response-<temp> id in-place to response-<server> while keeping the same user-message DOM element.
+ const committed={...optimistic,hostTurnId:'response-server-2'};
+ known=merge(known,[first,committed]);
+ assert.equal(known.length,2,'in-place hostTurnId upgrade must not create a duplicate marker');
+ assert.equal(known[0].id,firstId);
+ assert.equal(known[0].hostTurnId,'response-1');
+ assert.equal(known[1].id,optimisticId,'marker id must stay stable across optimistic -> committed id upgrade');
+ assert.equal(known[1].hostTurnId,'response-server-2');
+ assert.equal(known[1].element,optimistic.element);
+
+ // Even if the host framework strips data-gv-turn-id during re-render, matching by live element still upgrades cleanly.
+ committed.element.setAttribute('data-gv-turn-id','');
+ const reCommitted={...committed,hostTurnId:'response-server-2b'};
+ known=merge(known,[first,reCommitted]);
+ assert.equal(known.length,2);
+ assert.equal(known[1].id,optimisticId);
+ assert.equal(known[1].hostTurnId,'response-server-2b');
+
+ // Guard: if the old hostTurnId is still mounted on another element, do not hijack its marker.
+ const movedOld=turn('response-server-2b','你好？',280);
+ const reusedEl={...reCommitted,hostTurnId:'response-server-3'};
+ known=merge(known,[first,movedOld,reusedEl]);
+ assert.equal(known.length,3);
+ assert.deepEqual(Array.from(known,m=>m.hostTurnId),['response-1','response-server-2b','response-server-3']);
+
+ // Guard: if a live element switches to an already-known hostTurnId, no zombie duplicate shares that element.
+ const recycled={...first,hostTurnId:'response-server-3'};
+ const kept=rememberedMarkers(known,[recycled]);
+ assert.deepEqual(Array.from(kept,m=>m.hostTurnId),['response-server-3']);
+});
+
+test('Grok in-place response-id commit on send (with ?rid= update) keeps one stable marker per turn',()=>{
+ const Node={ELEMENT_NODE:1,TEXT_NODE:3,DOCUMENT_POSITION_FOLLOWING:4};
+ class MiniEl{
+  constructor(tag,text=''){
+   this.nodeType=1;this.tagName=tag.toUpperCase();this.textContent=text;
+   this.attrs=new Map();this.children=[];this.parentElement=null;this.style={};this.classList=[];
+   this.top=0;this.height=48;this.scrollTop=0;this.scrollHeight=973;this.clientHeight=661;
+  }
+  get id(){return this.attrs.get('id')??'';}
+  set id(v){this.attrs.set('id',v);}
+  get childNodes(){return this.children.length?this.children:(this.textContent?[{nodeType:3,nodeValue:this.textContent}]:[]);}
+  get isConnected(){for(let c=this;c;c=c.parentElement)if(c===doc.body)return true;return false;}
+  setAttribute(k,v){this.attrs.set(k,String(v));if(k==='class')this.classList=String(v).split(/\s+/).filter(Boolean);}
+  getAttribute(k){return this.attrs.get(k)??null;}
+  hasAttribute(k){return this.attrs.has(k);}
+  removeAttribute(k){this.attrs.delete(k);}
+  appendChild(c){c.parentElement=this;this.children.push(c);return c;}
+  removeChild(c){const i=this.children.indexOf(c);if(i>=0)this.children.splice(i,1);c.parentElement=null;}
+  matches(sel){
+   return sel.split(',').map(s=>s.trim()).some(part=>{
+    if(part==='[data-testid="user-message"]') return this.getAttribute('data-testid')==='user-message';
+    if(part==='[data-testid="chat-transcript-scroller"]') return this.getAttribute('data-testid')==='chat-transcript-scroller';
+    if(part==='[id^="response-"]') return this.id.startsWith('response-');
+    return false;
+   });
+  }
+  closest(sel){for(let c=this;c;c=c.parentElement)if(c.matches(sel))return c;return null;}
+  querySelectorAll(sel){
+   const out=[];
+   const walk=n=>{for(const c of n.children){if(c.matches(sel))out.push(c);walk(c);}};
+   walk(this);return out;
+  }
+  querySelector(sel){return this.querySelectorAll(sel)[0]??null;}
+  getBoundingClientRect(){return {top:this.top,bottom:this.top+this.height,height:this.height,width:400};}
+ }
+ const body=new MiniEl('body');
+ const findById=(node,id)=>{if(node.id===id)return node;for(const c of node.children){const f=findById(c,id);if(f)return f;}return null;};
+ const doc={documentElement:body,body,scrollingElement:body,querySelector:s=>body.querySelector(s),querySelectorAll:s=>body.querySelectorAll(s),getElementById:id=>findById(body,id)};
+ const loc={href:'https://grok.com/c/test-conv?rid=rid-1',pathname:'/c/test-conv',origin:'https://grok.com'};
+ const adapterScope={
+  module:{exports:{}},location:loc,
+  window:{scrollY:0,innerHeight:661,addEventListener(){},removeEventListener(){}},
+  document:doc,Node,Element:MiniEl,HTMLElement:MiniEl,HTMLFormElement:class{},MutationObserver:class{observe(){}},
+  getComputedStyle:el=>({display:'block',flexDirection:'column',overflowY:el.style.overflowY||'visible'}),
+ };
+ vm.runInNewContext(adapterBundled.outputFiles[0].text,adapterScope);
+ const {CatalogTimelineAdapter}=adapterScope.module.exports;
+
+ const scroller=new MiniEl('div');
+ scroller.setAttribute('data-testid','chat-transcript-scroller');
+ scroller.style.overflowY='scroll';
+ scroller.scrollTop=312;scroller.clientHeight=661;scroller.scrollHeight=973;
+ body.appendChild(scroller);
+
+ function makeGrokTurn(id,text,top){
+  const resp=new MiniEl('div');resp.id=id;
+  const msg=new MiniEl('div',text);msg.setAttribute('data-testid','user-message');msg.top=top;
+  resp.appendChild(msg);
+  return {resp,msg};
+ }
+
+ const t0=makeGrokTurn('response-4dfaf142','你好？',-184);
+ const t1=makeGrokTurn('response-209d3217','你是什么模型？',-48);
+ scroller.appendChild(t0.resp);
+ scroller.appendChild(t1.resp);
+
+ const adapter=new CatalogTimelineAdapter({
+  siteId:'grok',siteLabel:'Grok',position:'left',pluginId:'lite.grok',coachmarkId:'lite-timeline',
+  scrollContainerSelector:'[data-testid="chat-transcript-scroller"]',
+  turnSelector:'[data-testid="user-message"]',
+ }, {observe(){},canStar:()=>true});
+
+ let snap=adapter.turns.read([]);
+ assert.equal(snap.markers.length,2);
+
+ // User sends a 3rd turn: Grok inserts optimistic response-903ee843.
+ const t2=makeGrokTurn('response-903ee843','1+1等于几？',128);
+ scroller.appendChild(t2.resp);
+ snap=adapter.turns.read(snap.markers);
+ assert.equal(snap.markers.length,3);
+ const t2MarkerId=snap.markers[2].id;
+ assert.equal(t2.msg.getAttribute('data-gv-turn-id'),t2MarkerId);
+
+ // ~1s later, Grok updates ?rid= and mutates the SAME div#response-903ee843 id in-place to response-f398b909.
+ loc.href='https://grok.com/c/test-conv?rid=rid-2';
+ t2.resp.id='response-f398b909';
+ snap=adapter.turns.read(snap.markers);
+ assert.equal(snap.markers.length,3,'in-place response-id commit must not duplicate the turn on the timeline');
+ assert.equal(snap.markers[2].id,t2MarkerId);
+ assert.equal(snap.markers[2].hostTurnId,'response-f398b909');
+ assert.equal(t2.msg.getAttribute('data-gv-turn-id'),t2MarkerId);
+ assert.deepEqual(Array.from(snap.markers,m=>m.hostTurnId),['response-4dfaf142','response-209d3217','response-f398b909']);
+});
+
+test('Claude prunes disconnected edited turns even when scrolled into reply while keeping open editors and virtualized holes intact',()=>{
+ const Node={ELEMENT_NODE:1,TEXT_NODE:3,DOCUMENT_POSITION_FOLLOWING:4};
+ class MiniEl{
+  constructor(tag,text=''){
+   this.nodeType=1;this.tagName=tag.toUpperCase();this.textContent=text;
+   this.attrs=new Map();this.children=[];this.parentElement=null;this.style={};this.classList=[];
+   this.top=0;this.height=24;this.scrollTop=0;this.scrollHeight=1854;this.clientHeight=707;
+  }
+  get childNodes(){return this.children.length?this.children:(this.textContent?[{nodeType:3,nodeValue:this.textContent}]:[]);}
+  get isConnected(){for(let c=this;c;c=c.parentElement)if(c===doc.body)return true;return false;}
+  setAttribute(k,v){this.attrs.set(k,String(v));if(k==='class')this.classList=String(v).split(/\s+/).filter(Boolean);}
+  getAttribute(k){return this.attrs.get(k)??null;}
+  hasAttribute(k){return this.attrs.has(k);}
+  removeAttribute(k){this.attrs.delete(k);}
+  appendChild(c){c.parentElement=this;this.children.push(c);return c;}
+  removeChild(c){const i=this.children.indexOf(c);if(i>=0)this.children.splice(i,1);c.parentElement=null;}
+  matches(sel){
+   return sel.split(',').map(s=>s.trim()).some(part=>{
+    if(part==='[data-testid="user-message"]') return this.getAttribute('data-testid')==='user-message';
+    if(part==='.font-claude-message') return this.classList.includes('font-claude-message');
+    if(part==='[data-testid="assistant-message"]') return this.getAttribute('data-testid')==='assistant-message';
+    if(part==='[data-autoscroll-container="true"]') return this.getAttribute('data-autoscroll-container')==='true';
+    if(part==='[data-testid="message-edit-box"]') return this.getAttribute('data-testid')==='message-edit-box';
+    if(part==='[data-turn-key]') return this.hasAttribute('data-turn-key');
+    if(part==='[data-message-id]') return this.hasAttribute('data-message-id');
+    return false;
+   });
+  }
+  closest(sel){for(let c=this;c;c=c.parentElement)if(c.matches(sel))return c;return null;}
+  querySelectorAll(sel){
+   const out=[];
+   const walk=n=>{for(const c of n.children){if(c.matches(sel))out.push(c);walk(c);}};
+   walk(this);return out;
+  }
+  querySelector(sel){return this.querySelectorAll(sel)[0]??null;}
+  getBoundingClientRect(){return {top:this.top,bottom:this.top+this.height,height:this.height,width:700};}
+  compareDocumentPosition(other){
+   const flat=[];const walk=n=>{flat.push(n);for(const c of n.children)walk(c);};walk(doc.body);
+   return flat.indexOf(this)<flat.indexOf(other)?Node.DOCUMENT_POSITION_FOLLOWING:0;
+  }
+ }
+ const body=new MiniEl('body');
+ const doc={documentElement:body,body,scrollingElement:body,querySelector:s=>body.querySelector(s),querySelectorAll:s=>body.querySelectorAll(s)};
+ const adapterScope={
+  module:{exports:{}},
+  location:{href:'https://claude.ai/chat/test-conv',pathname:'/chat/test-conv',origin:'https://claude.ai'},
+  window:{scrollY:0,innerHeight:707,addEventListener(){},removeEventListener(){}},
+  document:doc,Node,Element:MiniEl,HTMLElement:MiniEl,HTMLFormElement:class{},MutationObserver:class{observe(){}},
+  getComputedStyle:el=>({display:'block',flexDirection:'column',overflowY:el.style.overflowY||'visible'}),
+ };
+ vm.runInNewContext(adapterBundled.outputFiles[0].text,adapterScope);
+ const {CatalogTimelineAdapter}=adapterScope.module.exports;
+
+ const scroller=new MiniEl('div');
+ scroller.setAttribute('data-autoscroll-container','true');
+ scroller.style.overflowY='auto';
+ scroller.scrollTop=1148;scroller.clientHeight=707;scroller.scrollHeight=1854;
+ body.appendChild(scroller);
+
+ function makeClaudeTurn(key,text,top,replyTop,replyHeight){
+  const wrap=new MiniEl('div');wrap.setAttribute('data-turn-key',key);
+  const msg=new MiniEl('div',text);msg.setAttribute('data-testid','user-message');msg.top=top;msg.height=24;
+  wrap.appendChild(msg);
+  const reply=new MiniEl('div','回复 '+text);reply.setAttribute('class','font-claude-message');reply.top=replyTop;reply.height=replyHeight;
+  return {wrap,msg,reply};
+ }
+
+ const t0=makeClaudeTurn('turn-0','桌面端有什么用？',-1055,-1015,960);
+ const t1=makeClaudeTurn('turn-1-v1','你觉得我目前有必要用嘛',-31,8,690);
+ scroller.appendChild(t0.wrap);scroller.appendChild(t0.reply);
+ scroller.appendChild(t1.wrap);scroller.appendChild(t1.reply);
+
+ const adapter=new CatalogTimelineAdapter({
+  siteId:'claude',siteLabel:'Claude',position:'left',pluginId:'lite.claude',coachmarkId:'lite-timeline',
+  scrollContainerSelector:'[data-autoscroll-container="true"]',
+  turnSelector:'[data-testid="user-message"]',
+  assistantTurnSelector:'.font-claude-message, [data-testid="assistant-message"]',
+ }, {observe(){},canStar:()=>true});
+
+ let snap=adapter.turns.read([]);
+ assert.equal(snap.markers.length,2);
+ const t1OrigId=snap.markers[1].id;
+
+ // Opening inline edit replaces user-message with message-edit-box carrying data-message-uuid: marker stays intact (Cancel safe).
+ scroller.removeChild(t1.wrap);
+ const editBox=new MiniEl('div');
+ editBox.setAttribute('data-testid','message-edit-box');
+ editBox.setAttribute('data-message-uuid','turn-1-v1');
+ scroller.appendChild(editBox);
+ snap=adapter.turns.read(snap.markers);
+ assert.equal(snap.markers.length,2,'open Claude edit box must keep its marker intact for Cancel');
+ assert.equal(snap.markers[1].id,t1OrigId);
+
+ // Submitting edit (even without click listener, e.g. Enter or async optimistic replacement) removes editBox and mounts turn-1-v2
+ // with user bubble scrolled 31px above scrollTop while its reply fills the viewport.
+ scroller.removeChild(editBox);
+ const t1v2=makeClaudeTurn('turn-1-v2','你觉得我目前有必要用嘛？',-31,8,690);
+ scroller.appendChild(t1v2.wrap);
+ snap=adapter.turns.read(snap.markers);
+ assert.equal(snap.markers.length,2,'replaced turn inside contiguous mounted window must be pruned without duplicate');
+ assert.deepEqual(Array.from(snap.markers,m=>m.hostTurnId),['turn-0','turn-1-v2']);
+
+ // Virtualized hole safety: remember a middle turn at center=3000 while top [93..1100] and a pinned tail turn at [5000..5500] are mounted.
+ scroller.scrollTop=0;scroller.scrollHeight=6000;
+ t0.msg.top=93;t0.reply.top=133;t0.reply.height=900;
+ t1v2.msg.top=1060;t1.reply.top=1100;t1.reply.height=400;
+ const mid=makeClaudeTurn('turn-mid','中间轮次',3000,3040,400);
+ const tail=makeClaudeTurn('turn-tail','末尾轮次',5000,5040,400);
+ scroller.appendChild(mid.wrap);scroller.appendChild(mid.reply);
+ scroller.appendChild(tail.wrap);scroller.appendChild(tail.reply);
+ snap=adapter.turns.read(snap.markers);
+ assert.equal(snap.markers.length,4);
+
+ // Virtualize out turn-mid while keeping top window and pinned tail turn mounted: turn-mid MUST NOT be pruned!
+ scroller.removeChild(mid.wrap);scroller.removeChild(mid.reply);
+ snap=adapter.turns.read(snap.markers);
+ assert.equal(snap.markers.length,4,'virtualized turn between top window and pinned tail anchor must stay preserved');
+ assert.deepEqual(Array.from(snap.markers,m=>m.hostTurnId),['turn-0','turn-1-v2','turn-mid','turn-tail']);
+});
