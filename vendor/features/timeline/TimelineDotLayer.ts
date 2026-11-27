@@ -24,6 +24,11 @@ export class TimelineDotLayer {
 
   private _cssVarTopSupported: boolean | null = null;
   private readonly dots = new Map<string, DotElement>();
+  private readonly dotOffsets = new Map<string, number>();
+  private activeIndicator: HTMLElement | null = null;
+  private activeIndicatorPositioned = false;
+  private lastActiveIndicatorOffset: number | null = null;
+  private indicatorGlideUntil = 0;
   private normalizedPositions: number[] = [];
   private destroyed = false;
   private runnerRaf: number | null = null;
@@ -87,6 +92,7 @@ export class TimelineDotLayer {
       dot.classList.toggle('active', id === this.activeTurnId);
       dot.setAttribute('aria-current', String(id === this.activeTurnId));
     }
+    this.syncActiveIndicator();
   }
   destroy(): void {
     this.destroyed = true;
@@ -94,6 +100,12 @@ export class TimelineDotLayer {
     this.bar?.removeEventListener('pointermove', this.onRulerPointerMove);
     this.bar?.removeEventListener('pointerleave', this.onRulerPointerLeave);
     this.rulerPointerY = null;
+    this.activeIndicator?.remove();
+    this.activeIndicator = null;
+    this.activeIndicatorPositioned = false;
+    this.lastActiveIndicatorOffset = null;
+    this.indicatorGlideUntil = 0;
+    this.dotOffsets.clear();
     this.dots.clear();
     this.bar = null;
     this.track = null;
@@ -346,17 +358,20 @@ export class TimelineDotLayer {
     const dot = event.target instanceof Element
       ? event.target.closest<HTMLElement>('.timeline-dot') : null;
     const rect = dot && this.bar?.contains(dot) ? dot.getBoundingClientRect() : null;
-    this.rulerPointerY = rect ? rect.top + rect.height / 2 : null;
-    this.updateRulerWave();
+    const nextPointerY = rect ? rect.top + rect.height / 2 : null;
+    if (nextPointerY === this.rulerPointerY) return;
+    this.rulerPointerY = nextPointerY;
+    this.updateRulerWave(true);
   };
 
   private readonly onRulerPointerLeave = (): void => {
+    if (this.rulerPointerY === null) return;
     this.rulerPointerY = null;
-    this.updateRulerWave();
+    this.updateRulerWave(true);
   };
 
   /** Falloff around the hovered tick; movement inside its region leaves widths unchanged. */
-  private updateRulerWave(): void {
+  private updateRulerWave(fromPointer = false): void {
     const ruler = this.options.getStyle() === 'ruler';
     if (!ruler) this.rulerPointerY = null;
     const dots = [...this.dots.values()].filter(dot => dot.isConnected);
@@ -381,6 +396,80 @@ export class TimelineDotLayer {
       const rank = hovered < 0 ? lastRank : Math.min(lastRank, Math.abs(index - hovered));
       dot.style.setProperty('--gv-timeline-ruler-width', `${RULER_TICK_WIDTHS[rank]}px`);
     });
+    this.syncActiveIndicatorWidth(fromPointer);
+  }
+
+  private ensureActiveIndicator(): HTMLElement | null {
+    if (!this.content || this.destroyed) return null;
+    if (!this.activeIndicator || !this.activeIndicator.isConnected) {
+      const indicator = document.createElement('div');
+      indicator.className = 'gv-timeline-active-indicator';
+      indicator.setAttribute('aria-hidden', 'true');
+      this.content.appendChild(indicator);
+      this.activeIndicator = indicator;
+      this.activeIndicatorPositioned = false;
+      this.lastActiveIndicatorOffset = null;
+      this.indicatorGlideUntil = 0;
+    }
+    return this.activeIndicator;
+  }
+
+  private syncActiveIndicatorWidth(fromPointer = false): void {
+    if (!this.activeIndicator) return;
+    const activeDot = this.activeTurnId ? this.dots.get(this.activeTurnId) : undefined;
+    const rawWidth = activeDot?.style.getPropertyValue('--gv-timeline-ruler-width');
+    const crestWidth = RULER_TICK_WIDTHS[0];
+    const restWidth = RULER_TICK_WIDTHS[RULER_TICK_WIDTHS.length - 1];
+    const parsedWidth = rawWidth ? parseFloat(rawWidth) : NaN;
+    const targetWidth = Number.isFinite(parsedWidth) ? parsedWidth : restWidth;
+    const scale = targetWidth / crestWidth;
+    if (fromPointer && performance.now() >= this.indicatorGlideUntil) {
+      this.activeIndicator.classList.add('gv-ruler-wave-sync');
+    }
+    this.activeIndicator.style.setProperty('--gv-active-ruler-scale', String(scale));
+  }
+
+  private syncActiveIndicator(): void {
+    if (!this.content || this.destroyed) return;
+    const activeId = this.activeTurnId;
+    const activeDot = activeId ? this.dots.get(activeId) : undefined;
+    const offset = activeId ? this.dotOffsets.get(activeId) : undefined;
+    if (!activeId || !activeDot || !activeDot.isConnected || offset === undefined) {
+      // Keep the indicator anchored at its previous position while a newly appended active
+      // turn waits for render() to mount its dot, so the indicator glides onto the new node.
+      if (activeId && this.activeIndicatorPositioned && this.markers.some((m) => m.id === activeId)) {
+        return;
+      }
+      this.activeIndicator?.classList.remove('gv-active-visible', 'gv-ruler-wave-sync');
+      this.activeIndicatorPositioned = false;
+      this.lastActiveIndicatorOffset = null;
+      this.indicatorGlideUntil = 0;
+      return;
+    }
+    const indicator = this.ensureActiveIndicator();
+    if (!indicator) return;
+    if (!this.activeIndicatorPositioned) {
+      indicator.classList.remove('gv-ruler-wave-sync');
+      indicator.classList.add('gv-no-transition');
+      indicator.style.setProperty('--gv-active-offset', `${offset}px`);
+      this.syncActiveIndicatorWidth(false);
+      indicator.classList.add('gv-active-visible');
+      void indicator.offsetHeight;
+      indicator.classList.remove('gv-no-transition');
+      this.activeIndicatorPositioned = true;
+      this.lastActiveIndicatorOffset = offset;
+      return;
+    }
+    const moved =
+      this.lastActiveIndicatorOffset === null || Math.abs(offset - this.lastActiveIndicatorOffset) > 0.25;
+    if (moved) {
+      indicator.classList.remove('gv-ruler-wave-sync');
+      this.indicatorGlideUntil = performance.now() + 190;
+      this.lastActiveIndicatorOffset = offset;
+    }
+    this.syncActiveIndicatorWidth(false);
+    indicator.style.setProperty('--gv-active-offset', `${offset}px`);
+    indicator.classList.add('gv-active-visible');
   }
 
   private buildCompactMarkerOffsets(hiddenIndices: ReadonlySet<number>): Map<number, number> {
@@ -428,6 +517,7 @@ export class TimelineDotLayer {
     const start = 0;
     const end = this.markers.length - 1;
     const offsets = this.buildCompactMarkerOffsets(hidden);
+    const hadDots = this.dots.size > 0;
     const visibleIds = new Set<string>();
     const orderedDots: DotElement[] = [];
     for (let index = start; index <= end; index++) {
@@ -441,11 +531,21 @@ export class TimelineDotLayer {
         dot.dataset.targetTurnId = marker.id;
         dot.setAttribute('tabindex', '0');
         dot.setAttribute('aria-describedby', 'gemini-timeline-tooltip');
+        if (hadDots) {
+          dot.classList.add('gv-timeline-dot-enter');
+          dot.addEventListener(
+            'animationend',
+            () => dot.classList.remove('gv-timeline-dot-enter'),
+            { once: true },
+          );
+        }
         this.dots.set(marker.id, dot);
       }
       dot.dataset.markerIndex = String(index);
       dot.setAttribute('aria-label', marker.summary);
-      this.applyDotPosition(dot, index, offsets.get(index));
+      const offset = offsets.get(index) ?? 0;
+      this.dotOffsets.set(marker.id, offset);
+      this.applyDotPosition(dot, index, offset);
       const collapsed = this.geometry.isMarkerCollapsed(marker.id);
       dot.classList.toggle('active', marker.id === this.activeTurnId);
       dot.setAttribute('aria-current', String(marker.id === this.activeTurnId));
@@ -460,6 +560,7 @@ export class TimelineDotLayer {
       if (visibleIds.has(id)) continue;
       dot.remove();
       this.dots.delete(id);
+      this.dotOffsets.delete(id);
     }
     // Prepending history must preserve keyboard order without detaching already ordered focused dots.
     let nextNode: Element | null = this.content.querySelector('.timeline-dot');
@@ -469,5 +570,6 @@ export class TimelineDotLayer {
     }
     this.visibleRange = { start, end };
     this.updateRulerWave();
+    this.syncActiveIndicator();
   }
 }

@@ -262,6 +262,172 @@ test('ChatGPT thread mirror reads November rows layout beyond 300 provider ances
   assert.equal(container.querySelector('[data-gv-thread-anchor-layer]'), null);
 });
 
+test('readTurns keeps missing turn position without borrowing another turn text, and fills once matched', () => {
+  const dom = createMiniDom();
+  const scope = {
+    module: { exports: {} },
+    __voyagerLiteTestMode: true,
+    window: { postMessage() {} },
+    document: dom.document,
+    Element: dom.Element,
+    HTMLElement: dom.HTMLElement,
+    location: { pathname: '/c/conv-gap', origin: 'https://chatgpt.com' },
+    getComputedStyle: () => ({ display: 'block' }),
+  };
+  vm.runInNewContext(mirrorBundle.outputFiles[0].text, scope);
+  const { readTurns } = scope.module.exports;
+
+  const entryB = {
+    turnKey: 'B',
+    turn: { items: [{ messageId: 'B', message: 'message B', attachments: [{ label: 'b.pdf' }] }] },
+  };
+  const listMissingA = {
+    layout: { turnKeys: ['A', 'B'], topOffsetsPx: [100, 900], heightsPx: [600, 700] },
+    entries: [entryB],
+    container: dom.document.createElement('div'),
+    conversationId: 'conv-gap',
+  };
+  const partial = JSON.parse(JSON.stringify(readTurns(listMissingA)));
+  assert.equal(partial.length, 2);
+  assert.deepEqual(partial[0], { key: 'A', top: 100, height: 600, text: '', attachments: [] });
+  assert.deepEqual(partial[1], { key: 'B', top: 900, height: 700, text: 'message B', attachments: ['b.pdf'] });
+
+  // Once A arrives (even with internal messageId different from turnKey), A gets its own text.
+  const entryA = {
+    turnKey: 'A',
+    turn: { items: [{ messageId: 'internal-a-1', message: 'message A', attachments: [{ name: 'a.png' }] }] },
+  };
+  const full = JSON.parse(JSON.stringify(readTurns({ ...listMissingA, entries: [entryA, entryB] })));
+  assert.deepEqual(full[0], { key: 'A', top: 100, height: 600, text: 'message A', attachments: ['a.png'] });
+  assert.deepEqual(full[1], { key: 'B', top: 900, height: 700, text: 'message B', attachments: ['b.pdf'] });
+});
+
+test('ChatGPT thread mirror pauses observers, polling, and removes anchor layer when disabled via control message', () => {
+  const dom = createMiniDom();
+  const location = { pathname: '/c/conv-toggle', origin: 'https://chatgpt.com' };
+  const windowListeners = new Map();
+  const docListeners = new Map();
+  const timeouts = new Map();
+  const intervals = new Map();
+  let nextTimerId = 1;
+  let observerActive = false;
+  let observerDisconnects = 0;
+  let resizeObserved = false;
+  let resizeDisconnects = 0;
+  const posted = [];
+
+  const addListener = (map, type, fn) => {
+    const list = map.get(type) ?? [];
+    list.push(fn);
+    map.set(type, list);
+  };
+  const removeListener = (map, type, fn) => {
+    const list = map.get(type);
+    if (!list) return;
+    const idx = list.indexOf(fn);
+    if (idx >= 0) list.splice(idx, 1);
+  };
+
+  dom.document.addEventListener = (type, fn) => addListener(docListeners, type, fn);
+  dom.document.removeEventListener = (type, fn) => removeListener(docListeners, type, fn);
+
+  const win = {
+    addEventListener: (type, fn) => addListener(windowListeners, type, fn),
+    removeEventListener: (type, fn) => removeListener(windowListeners, type, fn),
+    setTimeout: (fn) => { const id = nextTimerId++; timeouts.set(id, fn); return id; },
+    clearTimeout: (id) => timeouts.delete(id),
+    setInterval: (fn) => { const id = nextTimerId++; intervals.set(id, fn); return id; },
+    clearInterval: (id) => intervals.delete(id),
+    postMessage: (data, origin) => posted.push({ data, origin }),
+  };
+
+  class FakeMutationObserver {
+    constructor(cb) { this.cb = cb; }
+    observe() { observerActive = true; }
+    disconnect() { observerActive = false; observerDisconnects++; }
+  }
+  class FakeResizeObserver {
+    constructor(cb) { this.cb = cb; }
+    observe() { resizeObserved = true; }
+    disconnect() { resizeObserved = false; resizeDisconnects++; }
+  }
+
+  const scope = {
+    module: { exports: {} },
+    __voyagerLiteTestMode: true,
+    window: win,
+    document: dom.document,
+    Element: dom.Element,
+    HTMLElement: dom.HTMLElement,
+    MutationObserver: FakeMutationObserver,
+    ResizeObserver: FakeResizeObserver,
+    location,
+    getComputedStyle: () => ({ display: 'block' }),
+  };
+  vm.runInNewContext(mirrorBundle.outputFiles[0].text, scope);
+  const { installThreadMirror } = scope.module.exports;
+
+  const page = dom.document.createElement('div');
+  page.setAttribute('data-app-shell-active-page', 'true');
+  const main = dom.document.createElement('main');
+  const container = dom.document.createElement('div');
+  const row = dom.document.createElement('div');
+  row.setAttribute('data-turn-key', 'k1');
+  container.appendChild(row);
+  main.appendChild(container);
+  page.appendChild(main);
+  dom.document.body.appendChild(page);
+  const rootFiber = {};
+  rootFiber.stateNode = { current: rootFiber };
+  const listFiber = {
+    memoizedProps: {
+      rows: [{ turnKey: 'k1', turn: { items: [{ messageId: 'k1', message: 'hello' }] } }],
+      conversationId: 'conv-toggle',
+      scrollStateConversationId: 'conv-toggle',
+      isConversationLoading: false,
+    },
+    memoizedState: { memoizedState: { current: { turnKeys: ['k1'], topOffsetsPx: [10], heightsPx: [100] } } },
+    child: { tag: 5, stateNode: container },
+    return: rootFiber,
+  };
+  row['__reactFiber$test'] = { return: listFiber };
+
+  const handle = installThreadMirror();
+  assert.ok(handle);
+  assert.equal(posted.some((m) => m.data.__gvType === 'gv-thread-mirror-ready'), true);
+  assert.equal(observerActive, true);
+  assert.equal(intervals.size, 1);
+  assert.equal((docListeners.get('scroll') ?? []).length, 1);
+
+  // Flush scheduled initial sync -> layer created & container ResizeObserver attached.
+  for (const fn of [...timeouts.values()]) fn();
+  assert.ok(container.querySelector('[data-gv-thread-anchor-layer]'), 'anchor layer mounted when enabled');
+  assert.equal(resizeObserved, true);
+
+  // Disable via postMessage control signal.
+  for (const fn of windowListeners.get('message') ?? []) {
+    fn({ source: win, origin: location.origin, data: { __gvType: 'gv-thread-mirror-control', enabled: false } });
+  }
+  assert.equal(observerActive, false, 'MutationObserver disconnected on disable');
+  assert.ok(observerDisconnects >= 1);
+  assert.equal(resizeObserved, false, 'ResizeObserver disconnected on disable');
+  assert.ok(resizeDisconnects >= 1);
+  assert.equal(intervals.size, 0, 'polling interval cleared on disable');
+  assert.equal((docListeners.get('scroll') ?? []).length, 0, 'scroll listener removed on disable');
+  assert.equal(container.querySelector('[data-gv-thread-anchor-layer]'), null, 'anchor layer removed on disable');
+
+  // Re-enable via postMessage control signal.
+  for (const fn of windowListeners.get('message') ?? []) {
+    fn({ source: win, origin: location.origin, data: { __gvType: 'gv-thread-mirror-control', enabled: true } });
+  }
+  assert.equal(observerActive, true, 'MutationObserver re-attached on re-enable');
+  assert.equal(intervals.size, 1, 'polling interval restored on re-enable');
+  for (const fn of [...timeouts.values()]) fn();
+  assert.ok(container.querySelector('[data-gv-thread-anchor-layer]'), 'anchor layer restored on re-enable');
+
+  handle.destroy();
+});
+
 test('CatalogTimelineAdapter scopes ChatGPT scroller, upgrades anchors to bubbles without duplicates, and falls back to DOM', () => {
   const dom = createMiniDom();
   const location = { href: 'https://chatgpt.com/c/active-1', pathname: '/c/active-1', origin: 'https://chatgpt.com' };

@@ -17,6 +17,18 @@ const context = vm.createContext({ module: { exports: {} } });
 context.exports = context.module.exports;
 vm.runInContext(bundle.outputFiles[0].text, context);
 
+const effectBundle = await build({
+  entryPoints: ['vendor/pages/content/visualEffects/resolveEffect.ts'],
+  bundle: true,
+  write: false,
+  format: 'cjs',
+  platform: 'node',
+});
+const effectCtx = vm.createContext({ module: { exports: {} } });
+effectCtx.exports = effectCtx.module.exports;
+vm.runInContext(effectBundle.outputFiles[0].text, effectCtx);
+const { resolveVisualEffect } = effectCtx.module.exports;
+
 const {
   GLOBAL_SCOPE,
   enabledPatch,
@@ -82,4 +94,15 @@ test('global settings apply to every platform and report mixed states when platf
   }
   assert.equal(readGlobalSettings(raw, ALL_SITES).enabled, true);
   assert.equal(readGlobalSettings(raw, ALL_SITES).enabledMixed, false);
+});
+
+test('resolveVisualEffect reads gvVisualEffect consistently for popup and page scripts', () => {
+  assert.equal(resolveVisualEffect({}), 'off');
+  assert.equal(resolveVisualEffect({ gvVisualEffect: null }), 'off');
+  assert.equal(resolveVisualEffect({ gvVisualEffect: 'off' }), 'off');
+  assert.equal(resolveVisualEffect({ gvVisualEffect: 'none' }), 'off');
+  assert.equal(resolveVisualEffect({ gvSnowEffect: true }), 'off');
+  assert.equal(resolveVisualEffect({ gvVisualEffect: 'sakura' }), 'sakura');
+  assert.equal(resolveVisualEffect({ gvVisualEffect: 'rain' }), 'rain');
+  assert.equal(resolveVisualEffect({ gvVisualEffect: 'snow' }), 'snow');
 });

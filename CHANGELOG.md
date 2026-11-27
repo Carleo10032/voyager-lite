@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.2.0 — 2026-11-27
+
+- Add a short, GPU-composited sliding active indicator (`.gv-timeline-active-indicator`, `180ms cubic-bezier(0.22, 1, 0.36, 1)`) across all timeline styles (Dots, Ruler, Compact) and both rail sides (`left` / `right`) on all four platforms (ChatGPT, Claude, Gemini, Grok), while keeping hover/focus states in a distinct neutral tint so the target node does not light up in active accent color before the gliding indicator arrives.
+- Smoothly reposition existing timeline dots/ticks (`180ms`) and gently fade/scale in newly appended nodes (`160ms`) when new turns arrive, while keeping initial render and style switching instant and honoring `prefers-reduced-motion: reduce`.
+- Fix ChatGPT's thread mirror (`readTurns`) borrowing another turn's text/attachments when `layout.turnKeys` and `entries` temporarily mismatch or omit an entry: preserve the turn's anchor position with empty text/attachments until its own record arrives.
+- Pause ChatGPT's MAIN-world thread mirror (`MutationObserver`, `ResizeObserver`, `scroll` listener, `1.5s` poll, and hidden anchor layer) whenever ChatGPT's timeline is disabled, and resume it cleanly when re-enabled.
+- Remove legacy `gvSnowEffect` storage handling and share a single `resolveVisualEffect` helper reading `gvVisualEffect` consistently across the popup and Snow/Sakura/Rain effects.
+
 ## 3.1.3 — 2026-11-23
 
 - Fix every newly sent Grok turn duplicating twice on the timeline when Grok commits an optimistic message by mutating its ancestor `div#response-<temp>` `id` in-place to `div#response-<server>` on the same connected DOM element: match in-place `hostTurnId` upgrades by live DOM element in `turnMerge.ts` (`matchKnownMarkers` / `rememberedMarkers`) while ensuring stale markers never remain attached to an element owned by a different `hostTurnId`, preserving the original marker ID across Grok and any other host performing in-place ID replacement.

@@ -249,6 +249,22 @@ function indexEntriesByKey(entries: readonly unknown[]): Map<string, unknown> {
   return byKey;
 }
 
+function entryMatchesKey(entry: unknown, key: string): boolean {
+  const d = asDict(entry);
+  if (!d) return false;
+  for (const candidate of [d.turnKey, d.key, d.id]) {
+    if (candidate === key) return true;
+  }
+  const items = asDict(d.turn)?.items;
+  if (!Array.isArray(items)) return false;
+  for (const rawItem of items) {
+    const item = asDict(rawItem);
+    if (!item || typeof item.message !== 'string') continue;
+    if (item.messageId === key || item.serverMessageId === key) return true;
+  }
+  return false;
+}
+
 export function readTurns(list: ThreadList): MirrorTurn[] {
   const { layout, entries } = list;
   let byKey: Map<string, unknown> | null = null;
@@ -257,12 +273,12 @@ export function readTurns(list: ThreadList): MirrorTurn[] {
     const key = layout.turnKeys[i];
     const top = Number(layout.topOffsetsPx[i]);
     if (typeof key !== 'string' || !key || !Number.isFinite(top)) continue;
-    let item = userItemOf(entries[i], key);
-    if (!item || (item.messageId !== key && item.serverMessageId !== key)) {
+    let entry: unknown = entryMatchesKey(entries[i], key) ? entries[i] : undefined;
+    if (entry === undefined) {
       byKey ??= indexEntriesByKey(entries);
-      const matched = byKey.get(key);
-      if (matched) item = userItemOf(matched, key) ?? item;
+      entry = byKey.get(key);
     }
+    const item = entry !== undefined ? userItemOf(entry, key) : null;
     turns.push({
       key,
       top,
@@ -420,6 +436,7 @@ export function syncThreadMirror(): number {
     list.conversationId,
     container,
     entries,
+    entries.length,
     layout.turnKeys,
     layout.topOffsetsPx,
     layout.heightsPx,
@@ -445,17 +462,42 @@ export function syncThreadMirror(): number {
   return turns.length;
 }
 
-export function installThreadMirror(): void {
+function clearMirrorState(): void {
+  containerResizeObserver?.disconnect();
+  containerResizeObserver = null;
+  observedContainer = null;
+  lastInputs = [];
+  lastLayoutSig = '';
+  document.querySelectorAll(`[${LAYER_ATTR}]`).forEach((layer) => layer.remove());
+  const root = activeRoot();
+  publishThread(root, routeConversationId(), false);
+}
+
+export interface ThreadMirrorHandle {
+  setEnabled(enabled: boolean): void;
+  destroy(): void;
+}
+
+export function installThreadMirror(): ThreadMirrorHandle | null {
   const scope = window as unknown as Dict;
-  if (scope.__voyagerLiteThreadMirrorInstalled) return;
+  if (scope.__voyagerLiteThreadMirrorInstalled) return null;
   scope.__voyagerLiteThreadMirrorInstalled = true;
 
+  let enabled = true;
+  let running = false;
+  let destroyed = false;
   let scheduledTimer: number | null = null;
-  const run = (): void => {
+  let pollTimer: number | null = null;
+
+  const cancelScheduled = (): void => {
     if (scheduledTimer !== null) {
       window.clearTimeout(scheduledTimer);
       scheduledTimer = null;
     }
+  };
+  const run = (): void => {
+    cancelScheduled();
+    if (!enabled || destroyed) return;
     try {
       syncThreadMirror();
     } catch {
@@ -463,7 +505,7 @@ export function installThreadMirror(): void {
     }
   };
   const schedule = (): void => {
-    if (scheduledTimer !== null) return;
+    if (!enabled || destroyed || scheduledTimer !== null) return;
     scheduledTimer = window.setTimeout(run, SYNC_DELAY_MS);
   };
   scheduleMirror = schedule;
@@ -474,10 +516,12 @@ export function installThreadMirror(): void {
     return !!target?.closest(`[${LAYER_ATTR}]`) || (m.target as Element).hasAttribute?.(LAYER_ATTR);
   };
   const observer = new MutationObserver((mutations) => {
-    if (mutations.every(isOwnMutation)) return;
+    if (!enabled || mutations.every(isOwnMutation)) return;
     schedule();
   });
-  const start = (): void => {
+
+  const attachObserver = (): void => {
+    if (!enabled || !running || destroyed || !document.documentElement) return;
     try {
       observer.observe(document.documentElement, {
         childList: true,
@@ -490,12 +534,63 @@ export function installThreadMirror(): void {
     }
     schedule();
   };
-  if (document.documentElement) start();
-  else document.addEventListener('DOMContentLoaded', start, { once: true });
 
-  document.addEventListener('scroll', schedule, { capture: true, passive: true });
-  window.addEventListener('popstate', schedule);
-  window.setInterval(schedule, POLL_MS);
+  const startRunning = (): void => {
+    if (running || destroyed) return;
+    running = true;
+    document.addEventListener('scroll', schedule, { capture: true, passive: true });
+    window.addEventListener('popstate', schedule);
+    pollTimer = window.setInterval(schedule, POLL_MS);
+    if (document.documentElement) attachObserver();
+    else document.addEventListener('DOMContentLoaded', attachObserver, { once: true });
+  };
+
+  const stopRunning = (): void => {
+    if (!running) return;
+    running = false;
+    cancelScheduled();
+    if (pollTimer !== null) {
+      window.clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    observer.disconnect();
+    document.removeEventListener('DOMContentLoaded', attachObserver);
+    document.removeEventListener('scroll', schedule, true);
+    window.removeEventListener('popstate', schedule);
+    clearMirrorState();
+  };
+
+  const setEnabled = (next: boolean): void => {
+    if (destroyed || enabled === next) return;
+    enabled = next;
+    if (enabled) startRunning();
+    else stopRunning();
+  };
+
+  const onControlMessage = (event: MessageEvent): void => {
+    if (destroyed || event.source !== window) return;
+    if (typeof location !== 'undefined' && event.origin !== location.origin) return;
+    const data = asDict(event.data);
+    if (data?.__gvType !== 'gv-thread-mirror-control' || typeof data.enabled !== 'boolean') return;
+    setEnabled(data.enabled);
+  };
+
+  window.addEventListener('message', onControlMessage);
+  startRunning();
+  window.postMessage({ __gvType: 'gv-thread-mirror-ready' }, location.origin);
+
+  const destroy = (): void => {
+    if (destroyed) return;
+    destroyed = true;
+    enabled = false;
+    stopRunning();
+    window.removeEventListener('message', onControlMessage);
+    scheduleMirror = null;
+    flushMirror = null;
+    delete scope.__voyagerLiteThreadMirrorInstalled;
+  };
+
+  return { setEnabled, destroy };
 }
 
 if (

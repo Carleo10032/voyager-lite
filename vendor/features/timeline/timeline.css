@@ -99,6 +99,7 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
   cursor: pointer;
   padding: 0;
   pointer-events: auto;
+  transition: top 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .timeline-dot::after {
@@ -214,7 +215,7 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
   opacity: 0.72;
   transform: translateY(-50%);
   transform-origin: right center;
-  transition: width 82ms cubic-bezier(.2,.8,.2,1), background-color 100ms ease;
+  transition: width 82ms cubic-bezier(.2,.8,.2,1), opacity 100ms ease;
 }
 .gemini-timeline-bar.gv-timeline-style-ruler.gv-timeline-ruler-inward-right .timeline-dot {
   /* Keep the 96px hit box centered on 50% while clipping its left overhang at the rail's outer edge so it never overlaps a left sidebar. */
@@ -225,11 +226,16 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
   left: 50%;
   transform-origin: left center;
 }
-.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.active::after,
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.starred::after {
+  background-color: var(--timeline-star-color);
+  opacity: 0.9;
+}
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot:hover::after,
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot:focus-visible::after {
-  background-color: var(--timeline-dot-active-color);
   opacity: 1;
+}
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.gv-timeline-dot-enter::after {
+  animation: gv-timeline-tick-enter 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot::before,
 .gemini-timeline-bar.gv-timeline-style-ruler .timeline-runner-ring {
@@ -287,14 +293,13 @@ html[data-gv-scheme] .gemini-timeline-bar:not(.timeline-no-container)::before {
   left: 50%;
 }
 
-.gemini-timeline-bar.timeline-style-compact .timeline-dot.active::after {
-  background-color: var(--timeline-dot-active-color);
-  opacity: 1;
-}
-
 .gemini-timeline-bar.timeline-style-compact .timeline-dot.starred::after {
   background-color: var(--timeline-star-color);
   opacity: 0.9;
+}
+
+.gemini-timeline-bar.timeline-style-compact .timeline-dot.gv-timeline-dot-enter::after {
+  animation: gv-timeline-tick-enter 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .gemini-timeline-bar.timeline-style-compact .timeline-runner-ring,
@@ -703,9 +708,11 @@ html[data-gv-scheme='dark'] .timeline-left-slider::before {
 }
 .gemini-timeline-bar.gv-timeline-style-dots {
   --lite-dot-idle-color: rgba(0, 0, 0, 0.16);
+  --lite-dot-hover-color: rgba(0, 0, 0, 0.38);
 }
 html[data-gv-scheme='dark'] .gemini-timeline-bar.gv-timeline-style-dots {
   --lite-dot-idle-color: rgba(255, 255, 255, 0.22);
+  --lite-dot-hover-color: rgba(255, 255, 255, 0.46);
 }
 .gemini-timeline-bar.gv-timeline-style-dots .timeline-dot::after {
   width: clamp(4px, calc(var(--lite-ruler-gap, 18px) - 4px), 10px);
@@ -723,19 +730,114 @@ html[data-gv-scheme='dark'] .gemini-timeline-bar.gv-timeline-style-dots {
   box-shadow: none;
   opacity: 1;
 }
-.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot.active::after,
 .gemini-timeline-bar.gv-timeline-style-dots .timeline-dot:hover::after,
 .gemini-timeline-bar.gv-timeline-style-dots .timeline-dot:focus-visible::after {
-  background-color: var(--timeline-dot-active-color);
+  background-color: var(--lite-dot-hover-color);
   box-shadow: none;
   opacity: 1;
   transform: translate(-50%, -50%);
 }
-.gemini-timeline-bar.gv-timeline-switching .timeline-dot::after {
+.gemini-timeline-bar.gv-timeline-style-dots .timeline-dot.gv-timeline-dot-enter::after {
+  animation: gv-timeline-dot-enter 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Gliding active indicator shared across Dots, Ruler, and Compact styles */
+.gv-timeline-active-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  background-color: var(--timeline-dot-active-color);
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  will-change: transform, opacity;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 120ms ease;
+}
+.gv-timeline-active-indicator.gv-active-visible {
+  opacity: 1;
+}
+.gv-timeline-active-indicator.gv-no-transition {
   transition: none !important;
 }
+.gemini-timeline-bar.gv-timeline-style-dots .gv-timeline-active-indicator {
+  width: clamp(4px, calc(var(--lite-ruler-gap, 18px) - 4px), 10px);
+  height: clamp(4px, calc(var(--lite-ruler-gap, 18px) - 4px), 10px);
+  border-radius: 50%;
+  transform: translate3d(-50%, calc(var(--gv-active-offset, 0px) - 50%), 0);
+}
+.gemini-timeline-bar.gv-timeline-style-ruler .gv-timeline-active-indicator {
+  right: 50%;
+  left: auto;
+  width: 32px;
+  height: var(--lite-tick-height, 3px);
+  border-radius: 1px;
+  transform: translate3d(0, calc(var(--gv-active-offset, 0px) - 50%), 0)
+    scaleX(var(--gv-active-ruler-scale, 0.234375));
+  transform-origin: right center;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 120ms ease;
+}
+.gemini-timeline-bar.gv-timeline-style-ruler .gv-timeline-active-indicator.gv-ruler-wave-sync {
+  transition:
+    transform 82ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 120ms ease;
+}
+.gemini-timeline-bar.gv-timeline-style-ruler.gv-timeline-ruler-inward-right .gv-timeline-active-indicator {
+  right: auto;
+  left: 50%;
+  transform-origin: left center;
+}
+.gemini-timeline-bar.timeline-style-compact .gv-timeline-active-indicator {
+  right: 50%;
+  left: auto;
+  width: 7.5px;
+  height: var(--lite-tick-height, 3px);
+  border-radius: 1px;
+  transform: translate3d(0, calc(var(--gv-active-offset, 0px) - 50%), 0);
+}
+.gemini-timeline-bar.timeline-style-compact.gv-timeline-ruler-inward-right .gv-timeline-active-indicator {
+  right: auto;
+  left: 50%;
+}
+
+@keyframes gv-timeline-dot-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes gv-timeline-tick-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) scaleX(0.35);
+  }
+  to {
+    opacity: 0.72;
+    transform: translateY(-50%) scaleX(1);
+  }
+}
+
+.gemini-timeline-bar.gv-timeline-switching .timeline-dot,
+.gemini-timeline-bar.gv-timeline-switching .timeline-dot::after,
+.gemini-timeline-bar.gv-timeline-switching .gv-timeline-active-indicator {
+  transition: none !important;
+  animation: none !important;
+}
 @media (prefers-reduced-motion: reduce) {
-  .gemini-timeline-bar.gv-timeline-style-dots .timeline-dot::after { transition: none; }
+  .timeline-dot,
+  .gv-timeline-active-indicator,
+  .gemini-timeline-bar .timeline-dot::after,
+  .gemini-timeline-bar.gv-timeline-style-ruler .gv-timeline-active-indicator {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 /* Host/browser rectangular focus outlines get clipped into horizontal bars by the rail. */

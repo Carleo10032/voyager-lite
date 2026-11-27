@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Check, ChevronDown, Globe } from 'lucide-react';
 import { TimelineSettingsCard, type TimelineSettingsValues } from '../vendor/pages/popup/components/TimelineSettingsCard';
 import { VisualEffectPicker, type VisualEffect } from '../vendor/pages/popup/components/VisualEffectPicker';
+import { resolveVisualEffect } from '../vendor/pages/content/visualEffects/resolveEffect';
 import { DarkModeToggle } from '../vendor/components/DarkModeToggle';
 import { Card } from '../vendor/components/ui/card';
 import { Label } from '../vendor/components/ui/label';
@@ -39,7 +40,7 @@ function Popup(){
   const activeSite=isGlobal ? undefined : sites.find(item=>item.siteId===scope);
   const detectedSite=sites.find(item=>item.siteId===detectedSiteId);
   const values=isGlobal ? readGlobalSettings(raw,allSiteIds) : readSettings(raw,scope);
-  const effect:VisualEffect=raw.gvVisualEffect==='snow'||raw.gvVisualEffect==='sakura'||raw.gvVisualEffect==='rain'?raw.gvVisualEffect:'off';
+  const effect:VisualEffect=resolveVisualEffect(raw);
 
   useEffect(()=>{
     let alive=true;
@@ -194,7 +195,7 @@ function Popup(){
         {(values.enabled || values.enabledMixed) && <TimelineSettingsCard values={values} styleMixed={values.styleMixed} sideMixed={values.sideMixed} onChange={change}
           onResetPosition={()=>{}}
           onViewStarredHistory={()=>{}} isVisible={id=>visible.has(id)} t={t}/>}
-        <VisualEffectPicker value={effect} onChange={value=>void write({gvVisualEffect:value,gvSnowEffect:false})} t={t}/>
+        <VisualEffectPicker value={effect} onChange={value=>void write({gvVisualEffect:value})} t={t}/>
       </>}
       {error && <p role="alert" className="text-destructive text-xs">{error}</p>}
     </div>

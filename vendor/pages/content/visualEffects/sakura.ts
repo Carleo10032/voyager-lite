@@ -11,6 +11,7 @@
 import { isFirefox } from '@/core/utils/browser';
 
 import { SAKURA_BASE_FRAME_MS, SAKURA_MAX_DPR, SakuraScene } from './sakuraScene';
+import { resolveVisualEffect } from './resolveEffect';
 import {
   SAKURA_RENDERER_CONNECT_MESSAGE,
   type SakuraRendererCommand,
@@ -21,7 +22,6 @@ const CANVAS_ID = 'gv-sakura-effect-canvas';
 const RENDERER_FRAME_ID = 'gv-sakura-effect-frame';
 const RENDERER_PAGE_PATH = 'src/pages/sakuraRenderer/index.html';
 const STORAGE_KEY = 'gvVisualEffect';
-const LEGACY_KEY = 'gvSnowEffect';
 const EFFECT_VALUE = 'sakura';
 const RENDERER_READY_TIMEOUT_MS = 3_000;
 
@@ -425,16 +425,10 @@ function forceDisable(): void {
   finalizeDrain();
 }
 
-function resolveEffect(result: Record<string, unknown>): string {
-  if (typeof result[STORAGE_KEY] === 'string') return result[STORAGE_KEY] as string;
-  if (result[LEGACY_KEY] === true) return 'snow';
-  return 'off';
-}
-
 export function startSakuraEffect(): void {
   try {
-    chrome.storage?.sync?.get({ [STORAGE_KEY]: null, [LEGACY_KEY]: false }, (result) => {
-      if (resolveEffect(result) === EFFECT_VALUE) enable();
+    chrome.storage?.sync?.get({ [STORAGE_KEY]: null }, (result) => {
+      if (resolveVisualEffect(result) === EFFECT_VALUE) enable();
     });
   } catch (error) {
     console.error('[Gemini Voyager] Failed to get sakura effect setting:', error);

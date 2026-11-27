@@ -41,8 +41,23 @@ async function main() {
   let timeline: ReturnType<typeof runRouteTimeline> | undefined;
   let controller: AbortController | undefined;
   const stored = await chrome.storage.sync.get(null);
+  let lastMirrorEnabled: boolean | null = null;
+  const syncThreadMirrorControl = (enabled: boolean, force = false) => {
+    if (!config.threadMirror) return;
+    if (!force && lastMirrorEnabled === enabled) return;
+    lastMirrorEnabled = enabled;
+    window.postMessage({ __gvType: 'gv-thread-mirror-control', enabled }, location.origin);
+  };
+  if (config.threadMirror) {
+    window.addEventListener('message', (event) => {
+      if (event.source !== window || event.origin !== location.origin) return;
+      if (event.data?.__gvType !== 'gv-thread-mirror-ready') return;
+      syncThreadMirrorControl(readSettings(stored, site.siteId).enabled, true);
+    });
+  }
   const apply = () => {
     const settings=readSettings(stored,site.siteId);
+    syncThreadMirrorControl(settings.enabled);
     if (!settings.enabled) { controller?.abort(); timeline=undefined; return; }
     const pluginSettings={timelineStyle:settings.timelineStyle,timelineSide:settings.timelineSide,draggable:false,markerLevel:false};
     if (!timeline) {
